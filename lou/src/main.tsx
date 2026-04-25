@@ -6,13 +6,15 @@ import ForceGraph2D, {
   type LinkObject,
   type NodeObject
 } from 'react-force-graph-2d'
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { fetchGraph } from './api/client'
 import { ChatScreen } from './components/ChatScreen'
 import { CommitHistoryScreen } from './components/CommitHistoryScreen'
 import { Nav } from './components/Nav'
+import { RoleSelect } from './components/RoleSelect'
 import { ReviewQueueScreen } from './components/ReviewQueueScreen'
 import { UploadModal } from './components/UploadModal'
+import { UserProvider, useUser } from './contexts/UserContext'
 import {
   ApiConsolePage,
   MegaBrainPage,
@@ -641,18 +643,22 @@ function App(): JSX.Element {
   )
 }
 
-function Shell(): JSX.Element {
+function ShellInner(): JSX.Element {
+  const { user } = useUser()
   const [pendingCount, setPendingCount] = React.useState(0)
   const [uploadOpen, setUploadOpen] = React.useState(false)
   const [refreshKey, setRefreshKey] = React.useState(0)
   const [currentPlaybookId, setCurrentPlaybookId] = React.useState<string | null>(() => getCurrentPlaybookId())
 
   React.useEffect(() => {
+    if (!user) return
     fetch('http://localhost:8000/api/review')
       .then((response) => response.ok ? response.json() : [])
       .then((items: unknown[]) => setPendingCount(items.length))
       .catch(() => setPendingCount(0))
-  }, [refreshKey])
+  }, [refreshKey, user])
+
+  if (!user) return <RoleSelect />
 
   function markChanged(): void {
     setRefreshKey((value) => value + 1)
@@ -663,10 +669,12 @@ function Shell(): JSX.Element {
     setCurrentPlaybookId(playbookId)
   }
 
+  const isPeter = user.role === 'peter'
+
   return (
     <>
       <Nav pendingCount={pendingCount} onUpload={() => setUploadOpen(true)} currentPlaybookId={currentPlaybookId} />
-      {uploadOpen && (
+      {isPeter && uploadOpen && (
         <UploadModal
           onClose={() => setUploadOpen(false)}
           onDone={markChanged}
@@ -674,19 +682,24 @@ function Shell(): JSX.Element {
         />
       )}
       <Routes>
-        <Route path="/" element={<UploadPlaybookPage onUploaded={rememberPlaybook} />} />
-        <Route path="/playbooks/:playbookId/edit" element={<PlaybookEditorPage />} />
-        <Route path="/playbooks/:playbookId/analysis" element={<PlaybookAnalysisPage />} />
+        <Route path="/" element={isPeter ? <UploadPlaybookPage onUploaded={rememberPlaybook} /> : <Navigate to="/mega-brain" replace />} />
+        <Route path="/playbooks/:playbookId/edit" element={isPeter ? <PlaybookEditorPage /> : <Navigate to="/mega-brain" replace />} />
+        <Route path="/playbooks/:playbookId/analysis" element={isPeter ? <PlaybookAnalysisPage /> : <Navigate to="/mega-brain" replace />} />
         <Route path="/playbooks/:playbookId/brain" element={<MiniBrainPage />} />
         <Route path="/legacy-brain" element={<App key={refreshKey} />} />
-        <Route path="/api-console" element={<ApiConsolePage />} />
+        <Route path="/api-console" element={isPeter ? <ApiConsolePage /> : <Navigate to="/mega-brain" replace />} />
         <Route path="/mega-brain" element={<MegaBrainPage />} />
         <Route path="/chat" element={<ChatScreen />} />
-        <Route path="/history" element={<CommitHistoryScreen />} />
-        <Route path="/review-queue" element={<ReviewQueueScreen onReviewed={markChanged} />} />
+        <Route path="/history" element={isPeter ? <CommitHistoryScreen /> : <Navigate to="/mega-brain" replace />} />
+        <Route path="/review-queue" element={isPeter ? <ReviewQueueScreen onReviewed={markChanged} /> : <Navigate to="/mega-brain" replace />} />
+        <Route path="*" element={<Navigate to={isPeter ? '/' : '/mega-brain'} replace />} />
       </Routes>
     </>
   )
+}
+
+function Shell(): JSX.Element {
+  return <ShellInner />
 }
 
 function AuditPanel({ node, onClose, onOpenHumanLoop }: { node: BrainNode; onClose: () => void; onOpenHumanLoop: () => void }): JSX.Element {
@@ -861,8 +874,10 @@ function HumanLoopPanel(props: {
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <Shell />
-    </BrowserRouter>
+    <UserProvider>
+      <BrowserRouter>
+        <Shell />
+      </BrowserRouter>
+    </UserProvider>
   </React.StrictMode>
 )

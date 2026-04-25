@@ -94,32 +94,71 @@ async def search(q: str = Query(..., min_length=2)) -> list[MegaBrainSearchResul
     return output
 
 
+_TOPIC_CLUSTERS: dict[str, set[str]] = {
+    "liability": {"liability", "damages", "cap", "unlimited", "indemnif", "loss", "consequential", "direct"},
+    "confidentiality": {"confidential", "disclosure", "secret", "nda", "information", "proprietary"},
+    "ip": {"ip", "intellectual", "property", "patent", "copyright", "trademark", "ownership", "know-how", "license"},
+    "term": {"term", "duration", "period", "survival", "survive", "perpetual", "expir"},
+    "law": {"governing", "law", "jurisdiction", "dispute", "arbitration", "litigation", "forum"},
+    "return": {"return", "destroy", "destruction", "copies", "deletion", "erase"},
+    "audit": {"audit", "inspection", "verify", "compliance", "record", "access"},
+    "security": {"security", "encrypt", "protection", "breach", "iso", "soc", "technical"},
+    "subcontractor": {"subcontract", "subprocessor", "third party", "supplier", "affiliate"},
+    "termination": {"terminat", "cancel", "exit", "wind", "consequence"},
+    "penalty": {"penalty", "liquidated", "contractual", "fine", "sanction"},
+    "publication": {"publish", "academic", "disclosure", "announce", "paper"},
+    "scope": {"scope", "purpose", "field", "use", "grant", "license"},
+    "payment": {"payment", "royalt", "fee", "consideration", "invoice"},
+}
+
+
+def _topic_cluster(label: str) -> set[str]:
+    label_lower = label.lower()
+    clusters: set[str] = set()
+    for cluster, keywords in _TOPIC_CLUSTERS.items():
+        if any(kw in label_lower for kw in keywords):
+            clusters.add(cluster)
+    return clusters
+
+
 def _cross_island_edges(islands: list[MegaBrainIslandView]) -> list[BrainEdgeView]:
-    """Create light visual links between islands without merging them."""
+    """Create semantically meaningful links between conceptually related clause nodes across islands."""
     edges: list[BrainEdgeView] = []
     for left_index, left in enumerate(islands):
         for right in islands[left_index + 1:]:
-            matches = _matching_topics(left, right)
-            for left_node, right_node, score in matches[:2]:
+            # Only connect clause-type nodes to avoid visual noise from hierarchy children
+            left_clauses = [n for n in left.nodes if n.node_type == "clause"]
+            right_clauses = [n for n in right.nodes if n.node_type == "clause"]
+
+            best: list[tuple[str, str, float, str]] = []
+            for ln in left_clauses:
+                lc = _topic_cluster(ln.label)
+                if not lc:
+                    continue
+                for rn in right_clauses:
+                    rc = _topic_cluster(rn.label)
+                    shared = lc & rc
+                    if shared:
+                        # Score = Jaccard on clusters, boosted by number of shared clusters
+                        score = len(shared) / len(lc | rc) + len(shared) * 0.08
+                        best.append((ln.id, rn.id, min(score, 1.0), list(shared)[0]))
+
+            # Take top-3 edges per island pair to avoid visual noise
+            best.sort(key=lambda x: x[2], reverse=True)
+            seen_left: set[str] = set()
+            seen_right: set[str] = set()
+            for lnid, rnid, score, cluster in best:
+                if lnid in seen_left or rnid in seen_right:
+                    continue
                 edges.append(BrainEdgeView(
-                    source=left_node,
-                    target=right_node,
-                    similarity=score,
-                    relationship="cross_playbook_topic_similarity",
+                    source=lnid,
+                    target=rnid,
+                    similarity=round(score, 4),
+                    relationship=f"cross_concept:{cluster}",
                     edge_scope="cross_island",
                 ))
+                seen_left.add(lnid)
+                seen_right.add(rnid)
+                if len([e for e in edges if e.source.startswith(left.playbook_id) or e.target.startswith(left.playbook_id)]) >= 6:
+                    break
     return edges
-
-
-def _matching_topics(left: MegaBrainIslandView, right: MegaBrainIslandView) -> list[tuple[str, str, float]]:
-    matches: list[tuple[str, str, float]] = []
-    for left_node in left.nodes:
-        left_terms = set(left_node.label.lower().split())
-        for right_node in right.nodes:
-            right_terms = set(right_node.label.lower().split())
-            if not left_terms or not right_terms:
-                continue
-            overlap = len(left_terms & right_terms) / len(left_terms | right_terms)
-            if overlap > 0:
-                matches.append((left_node.id, right_node.id, overlap))
-    return sorted(matches, key=lambda item: item[2], reverse=True)

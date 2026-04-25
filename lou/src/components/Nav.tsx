@@ -1,6 +1,16 @@
-import { BrainCircuit, Braces, ClipboardList, Download, FileSpreadsheet, History, MessageCircle, Network, SearchCode, Upload, Wand2 } from 'lucide-react'
+import React from 'react'
+import { BrainCircuit, ClipboardList, Download, FileSpreadsheet, History, MessageCircle, Network, SearchCode, Upload, UserRoundCog } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { exportExcel } from '../api/client'
+import { useUser } from '../contexts/UserContext'
+
+interface NavItem {
+  to: string
+  label: string
+  icon: LucideIcon
+  badge?: number
+}
 
 const itemStyle: React.CSSProperties = {
   display: 'grid',
@@ -22,18 +32,27 @@ export function Nav({
   onUpload: () => void
   currentPlaybookId: string | null
 }): JSX.Element {
+  const { user, setUser } = useUser()
   const activePlaybookPath = currentPlaybookId ? `/playbooks/${currentPlaybookId}` : '/playbooks/current'
-  const items = [
+
+  const peterItems: NavItem[] = [
     { to: '/', label: 'Upload', icon: Upload },
     { to: `${activePlaybookPath}/edit`, label: 'Editor', icon: FileSpreadsheet },
-    { to: `${activePlaybookPath}/analysis`, label: 'Logic', icon: Wand2 },
     { to: `${activePlaybookPath}/brain`, label: 'Brain', icon: Network },
-    { to: '/api-console', label: 'API', icon: Braces },
     { to: '/mega-brain', label: 'Mega', icon: BrainCircuit },
     { to: '/chat', label: 'Chat', icon: MessageCircle },
     { to: '/history', label: 'History', icon: History },
     { to: '/review-queue', label: 'Review', icon: ClipboardList, badge: pendingCount },
   ]
+
+  const suzanneItems: NavItem[] = [
+    { to: '/mega-brain', label: 'Brain', icon: BrainCircuit },
+    { to: `${activePlaybookPath}/brain`, label: 'Mini Brain', icon: Network },
+    { to: '/chat', label: 'Chat', icon: MessageCircle },
+  ]
+
+  const items: NavItem[] = user?.role === 'suzanne' ? suzanneItems : peterItems
+  const roleColor = user?.role === 'suzanne' ? 'var(--turquoise)' : '#4a2076'
 
   return (
     <aside style={{
@@ -57,7 +76,22 @@ export function Nav({
         <SearchCode size={19} />
         Lou
       </button>
-      <nav style={{ display: 'grid', gap: 4, marginTop: 10 }}>
+
+      {user && (
+        <div style={{ display: 'grid', placeItems: 'center', gap: 2, padding: '6px 4px', marginBottom: 4 }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: '50%',
+            background: roleColor, color: 'white',
+            display: 'grid', placeItems: 'center',
+            fontSize: 12, fontWeight: 700,
+          }}>
+            {user.name[0]}
+          </div>
+          <span style={{ fontSize: 9, color: 'var(--muted)', textAlign: 'center', lineHeight: 1.2 }}>{user.name}</span>
+        </div>
+      )}
+
+      <nav style={{ display: 'grid', gap: 4, marginTop: 4 }}>
         {items.map((item) => {
           const Icon = item.icon
           return (
@@ -67,25 +101,18 @@ export function Nav({
               style={({ isActive }) => ({
                 ...itemStyle,
                 color: isActive ? 'var(--ink)' : 'var(--muted)',
-                borderLeftColor: isActive ? 'var(--turquoise)' : 'transparent',
-                background: isActive ? 'rgba(0,153,153,.08)' : 'transparent',
+                borderLeftColor: isActive ? roleColor : 'transparent',
+                background: isActive ? `${roleColor}14` : 'transparent',
               })}
             >
               <span style={{ position: 'relative' }}>
                 <Icon size={19} />
-                {!!item.badge && (
+                {item.badge != null && item.badge > 0 && (
                   <span style={{
-                    position: 'absolute',
-                    top: -9,
-                    right: -12,
-                    minWidth: 17,
-                    height: 17,
-                    borderRadius: 999,
-                    background: 'var(--orange)',
-                    color: 'white',
-                    fontSize: 10,
-                    display: 'grid',
-                    placeItems: 'center',
+                    position: 'absolute', top: -9, right: -12,
+                    minWidth: 17, height: 17, borderRadius: 999,
+                    background: 'var(--orange)', color: 'white',
+                    fontSize: 10, display: 'grid', placeItems: 'center',
                   }}>{item.badge}</span>
                 )}
               </span>
@@ -94,15 +121,29 @@ export function Nav({
           )
         })}
       </nav>
-      <button
-        type="button"
-        onClick={() => void exportExcel()}
-        title="Export Excel"
-        style={{ ...itemStyle, border: 0, background: 'transparent', cursor: 'pointer', marginTop: 'auto', marginBottom: 16 }}
-      >
-        <Download size={19} />
-        Export
-      </button>
+
+      <div style={{ marginTop: 'auto', display: 'grid', gap: 0, paddingBottom: 16 }}>
+        {user?.role === 'peter' && (
+          <button
+            type="button"
+            onClick={() => void exportExcel()}
+            title="Export Excel"
+            style={{ ...itemStyle, border: 0, background: 'transparent', cursor: 'pointer' }}
+          >
+            <Download size={19} />
+            Export
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setUser(null)}
+          title="Change account"
+          style={{ ...itemStyle, border: 0, background: 'transparent', cursor: 'pointer' }}
+        >
+          <UserRoundCog size={19} />
+          Account
+        </button>
+      </div>
     </aside>
   )
 }
