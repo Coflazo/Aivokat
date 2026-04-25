@@ -57,6 +57,13 @@ class PlaybookIssueType(str, Enum):
     UNCLEAR_BUSINESS_LANGUAGE = "unclear_business_language"
 
 
+class RewriteMode(str, Enum):
+    BUSINESS_CLEAR = "business_clear"
+    LEGAL_PRECISE = "legal_precise"
+    SHORTER = "shorter"
+    HUMANIZED = "humanized"
+
+
 class Rule(SQLModel, table=True):
     id: Optional[int] = SQLField(default=None, primary_key=True)
     rule_id: str = SQLField(unique=True, index=True)
@@ -293,6 +300,47 @@ class PlaybookClausePatchResponse(BaseModel):
     playbook: PlaybookApiView
     updated_clause: PlaybookClauseView
     draft_diff: dict
+
+
+class RewriteCellRequest(BaseModel):
+    playbook_id: str
+    clause_id: str
+    field_name: str
+    text: str
+    mode: RewriteMode = RewriteMode.BUSINESS_CLEAR
+
+
+class RewriteCellResponse(BaseModel):
+    playbook_id: str
+    clause_id: str
+    field_name: str
+    mode: RewriteMode
+    original: str
+    rewritten: str
+    meaning_preservation_note: str
+
+
+class RewriteRowRequest(BaseModel):
+    playbook_id: str
+    clause_id: str
+    mode: RewriteMode = RewriteMode.BUSINESS_CLEAR
+
+
+class RewriteRowResponse(BaseModel):
+    playbook_id: str
+    clause_id: str
+    rewrites: list[RewriteCellResponse]
+
+
+class RewritePlaybookRequest(BaseModel):
+    playbook_id: str
+    mode: RewriteMode = RewriteMode.BUSINESS_CLEAR
+
+
+class RewritePlaybookResponse(BaseModel):
+    playbook_id: str
+    mode: RewriteMode
+    rewrites: list[RewriteCellResponse]
 
 
 class SegmentedClause(BaseModel):

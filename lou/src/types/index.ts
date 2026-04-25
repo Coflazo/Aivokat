@@ -4,6 +4,7 @@ export type Lifecycle = 'active' | 'staged' | 'approved'
 export type PlaybookStatus = 'draft' | 'published' | 'archived'
 export type ClauseAnalysisStatus = 'clean' | 'warning' | 'issue'
 export type IssueSeverity = 'info' | 'warning' | 'critical'
+export type RewriteMode = 'business_clear' | 'legal_precise' | 'shorter' | 'humanized'
 export type PlaybookIssueType =
   | 'hierarchy_inversion'
   | 'vague_red_line'
@@ -147,4 +148,26 @@ export interface PlaybookPatchResponse {
   playbook: PlaybookApi
   updated_clause: PlaybookClause
   draft_diff: Record<string, unknown>
+}
+
+export interface RewriteCellResponse {
+  playbook_id: string
+  clause_id: string
+  field_name: string
+  mode: RewriteMode
+  original: string
+  rewritten: string
+  meaning_preservation_note: string
+}
+
+export interface RewriteRowResponse {
+  playbook_id: string
+  clause_id: string
+  rewrites: RewriteCellResponse[]
+}
+
+export interface RewritePlaybookResponse {
+  playbook_id: string
+  mode: RewriteMode
+  rewrites: RewriteCellResponse[]
 }

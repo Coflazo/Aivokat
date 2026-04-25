@@ -7,7 +7,11 @@ import type {
   PlaybookApi,
   PlaybookPatchResponse,
   PlaybookUploadResponse,
-  ProposedCommit
+  ProposedCommit,
+  RewriteCellResponse,
+  RewriteMode,
+  RewritePlaybookResponse,
+  RewriteRowResponse
 } from '../types'
 
 const api = axios.create({ baseURL: 'http://localhost:8000/api' })
@@ -82,6 +86,41 @@ export const updatePlaybookClause = (
     field_name: fieldName,
     value,
     edited_by: editedBy,
+  }).then((r) => r.data)
+
+export const rewriteCell = (
+  playbookId: string,
+  clauseId: string,
+  fieldName: string,
+  text: string,
+  mode: RewriteMode
+): Promise<RewriteCellResponse> =>
+  api.post('/rewrite/cell', {
+    playbook_id: playbookId,
+    clause_id: clauseId,
+    field_name: fieldName,
+    text,
+    mode,
+  }).then((r) => r.data)
+
+export const rewriteRow = (
+  playbookId: string,
+  clauseId: string,
+  mode: RewriteMode
+): Promise<RewriteRowResponse> =>
+  api.post('/rewrite/row', {
+    playbook_id: playbookId,
+    clause_id: clauseId,
+    mode,
+  }).then((r) => r.data)
+
+export const rewritePlaybook = (
+  playbookId: string,
+  mode: RewriteMode
+): Promise<RewritePlaybookResponse> =>
+  api.post('/rewrite/playbook', {
+    playbook_id: playbookId,
+    mode,
   }).then((r) => r.data)
 
 export const uploadContract = (file: File, lawyerName: string) => {
