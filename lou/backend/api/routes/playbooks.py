@@ -118,6 +118,15 @@ async def upload_playbook(
     )
 
 
+@router.get("", response_model=list[PlaybookApiView])
+async def list_playbooks() -> list[PlaybookApiView]:
+    with Session(engine) as session:
+        playbooks = session.exec(
+            select(Playbook).order_by(Playbook.updated_at.desc())
+        ).all()
+    return [_load_playbook_view(playbook.playbook_id) for playbook in playbooks]
+
+
 @router.get("/{playbook_id}", response_model=PlaybookApiView)
 async def get_playbook(playbook_id: str) -> PlaybookApiView:
     return _load_playbook_view(playbook_id)

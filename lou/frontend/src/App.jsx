@@ -1,95 +1,81 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import logoUrl from "./lou-wordmark.svg";
 
-// ─── Design tokens (Siemens Palette) ──────────────────────────────────────────
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+
 const C = {
-  sidebar: "#004C54", // Sidebar Dark Teal
-  sidebarActive: "rgba(255,255,255,0.12)",
+  sidebar: "#004C54",
   sidebarBorder: "rgba(255,255,255,0.08)",
-  teal: "#00646E", // Primary Siemens Teal
-  tealLight: "#004a52", // Darker hover state
+  teal: "#00646E",
+  tealLight: "#004a52",
   tealXLight: "#E6F0F2",
-  green: "#00D7A0", // Accent Siemens Green
+  green: "#00D7A0",
   greenLight: "#E6FAF5",
-  amber: "#F5A623", // Warning Amber
+  amber: "#F5A623",
   amberLight: "#FEF6E9",
-  red: "#D0021B", // Red line Red
+  red: "#D0021B",
   redLight: "#FAE6E8",
-  bg: "#F4F6F7", // Background
+  purple: "#4A2076",
+  bg: "#F4F6F7",
   surface: "#FFFFFF",
   border: "#E1E4E5",
-  text: "#191c1d", // On-surface
-  textMuted: "#3f484a", // On-surface variant
-  textLight: "#6f797a", // Outline
+  text: "#191c1d",
+  textMuted: "#3f484a",
+  textLight: "#6f797a",
 };
 
-// ─── Keyframe styles injected once ───────────────────────────────────────────
 const GLOBAL_CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Inter', sans-serif; background: ${C.bg}; color: ${C.text}; }
+  button, input, textarea, select { font-family: inherit; }
 
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(16px); }
     to   { opacity: 1; transform: translateY(0); }
   }
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to   { opacity: 1; }
-  }
   @keyframes slideRight {
     from { transform: scaleX(0); }
     to   { transform: scaleX(1); }
   }
-
-  .anim-fadeUp { animation: fadeUp 0.4s ease both; }
-  .anim-fadeIn { animation: fadeIn 0.3s ease both; }
-
   .card {
     background: ${C.surface};
     border: 1px solid ${C.border};
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    transition: box-shadow 0.2s, transform 0.2s;
   }
-  .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-
   .btn-primary {
     background: ${C.teal};
     color: #fff;
     border: none;
     border-radius: 8px;
-    font-family: 'Inter', sans-serif;
     font-weight: 600;
     font-size: 14px;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     padding: 10px 20px;
-    transition: background 0.15s, transform 0.1s;
   }
   .btn-primary:hover { background: ${C.tealLight}; }
-  .btn-primary:active { transform: scale(0.97); }
-
+  .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
   .btn-ghost {
     background: transparent;
     color: ${C.teal};
     border: 1px solid ${C.border};
     border-radius: 8px;
-    font-family: 'Inter', sans-serif;
     font-weight: 500;
     font-size: 14px;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     padding: 10px 20px;
-    transition: background 0.15s;
   }
   .btn-ghost:hover { background: #EAECEE; }
-
   .badge {
     display: inline-flex;
     align-items: center;
@@ -102,44 +88,12 @@ const GLOBAL_CSS = `
     text-transform: uppercase;
   }
   .badge-green  { background: ${C.greenLight}; color: #008764; }
-  .badge-amber  { background: ${C.amberLight}; color: ${C.amber}; }
-  .badge-red    { background: ${C.redLight};   color: ${C.red}; }
+  .badge-amber  { background: ${C.amberLight}; color: #9A6400; }
+  .badge-red    { background: ${C.redLight}; color: ${C.red}; }
   .badge-teal   { background: ${C.tealXLight}; color: ${C.teal}; }
   .badge-gray   { background: #F3F4F6; color: #374151; }
-
-  .progress-bar {
-    height: 6px;
-    border-radius: 3px;
-    background: ${C.border};
-    overflow: hidden;
-  }
-  .progress-fill {
-    height: 100%;
-    border-radius: 3px;
-    background: ${C.teal};
-    transform-origin: left;
-    animation: slideRight 0.8s cubic-bezier(0.16,1,0.3,1) both;
-  }
-
-  .table-row {
-    display: grid;
-    border-bottom: 1px solid #F3F4F6;
-    transition: background 0.15s;
-  }
-  .table-row:hover { background: #FAFAFA; }
-
-  .clause-item {
-    padding: 12px 16px;
-    border-bottom: 1px solid ${C.border};
-    cursor: pointer;
-    transition: background 0.15s;
-    border-radius: 6px;
-    margin-bottom: 2px;
-  }
-  .clause-item:hover { background: ${C.bg}; }
-  .clause-item.active { background: ${C.tealXLight}; border-left: 3px solid ${C.teal}; }
-  .clause-item.conflict { border-left: 3px solid ${C.amber}; }
-
+  .progress-bar { height: 6px; border-radius: 3px; background: ${C.border}; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 3px; background: ${C.teal}; transform-origin: left; animation: slideRight .6s cubic-bezier(.16,1,.3,1) both; }
   .sidebar-link {
     display: flex;
     align-items: center;
@@ -151,55 +105,75 @@ const GLOBAL_CSS = `
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: background 0.15s, color 0.15s;
     border: none;
     background: transparent;
     width: calc(100% - 16px);
     text-align: left;
   }
-  .sidebar-link:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,1); }
+  .sidebar-link:hover { background: rgba(255,255,255,0.08); color: #fff; }
   .sidebar-link.active { background: rgba(255,255,255,0.14); color: #fff; font-weight: 600; }
-
   .drag-zone {
     border: 2px dashed #C8D6D8;
     border-radius: 8px;
-    padding: 48px 24px;
+    padding: 46px 24px;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 12px;
-    transition: border-color 0.2s, background 0.2s;
     cursor: pointer;
   }
-  .drag-zone:hover, .drag-zone.over { border-color: ${C.teal}; background: ${C.tealXLight}; }
-
-  .step-circle {
-    width: 36px; height: 36px;
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px; font-weight: 700;
-    flex-shrink: 0;
+  .drag-zone:hover { border-color: ${C.teal}; background: ${C.tealXLight}; }
+  .table-row {
+    display: grid;
+    border-bottom: 1px solid #F3F4F6;
+    transition: background .15s;
   }
-  .step-active   { background: ${C.teal}; color: #fff; }
-  .step-complete { background: ${C.green}; color: #fff; }
-  .step-pending  { background: #E5E7EB; color: #6B7280; }
-
-  .radio-opt {
+  .table-row:hover { background: #FAFAFA; }
+  .clause-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid ${C.border};
+    cursor: pointer;
+    border-radius: 6px;
+    margin-bottom: 2px;
+  }
+  .clause-item:hover { background: ${C.bg}; }
+  .clause-item.active { background: ${C.tealXLight}; border-left: 3px solid ${C.teal}; }
+  .clause-item.conflict { border-left: 3px solid ${C.amber}; }
+  .field-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: ${C.textLight};
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+  }
+  .form-field {
+    width: 100%;
     border: 1px solid ${C.border};
     border-radius: 8px;
-    padding: 14px 16px;
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-    display: flex;
-    gap: 12px;
-    align-items: flex-start;
+    padding: 11px 12px;
+    color: ${C.text};
+    background: #fff;
+    font-size: 14px;
   }
-  .radio-opt.selected { border-color: ${C.teal}; background: ${C.tealXLight}; }
-
+  .node-label {
+    font-size: 11px;
+    font-weight: 700;
+    fill: ${C.text};
+    pointer-events: none;
+  }
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 3px; }
 `;
+
+const NAV_ITEMS = [
+  { id: "home", label: "Home", icon: "home" },
+  { id: "upload", label: "Upload Playbook", icon: "upload_file" },
+  { id: "verification", label: "Clause Verification", icon: "fact_check" },
+  { id: "knowledge", label: "Knowledge Overview", icon: "description" },
+  { id: "graph", label: "Knowledge Graph", icon: "account_tree" },
+];
 
 function Icon({ name, size = 20, style = {} }) {
   return (
@@ -219,7 +193,36 @@ function Icon({ name, size = 20, style = {} }) {
   );
 }
 
-function Sidebar({ page, setPage }) {
+async function api(path, options = {}) {
+  const response = await fetch(`${API_BASE}${path}`, options);
+  if (!response.ok) {
+    let detail = `Request failed with ${response.status}`;
+    try {
+      const body = await response.json();
+      detail = body.detail || detail;
+    } catch {
+      // The response did not include JSON.
+    }
+    throw new Error(detail);
+  }
+  return response.json();
+}
+
+function openIssues(playbook) {
+  return (playbook?.clauses || []).flatMap((clause) =>
+    (clause.issues || [])
+      .filter((issue) => !issue.resolved_at)
+      .map((issue) => ({ ...issue, clause }))
+  );
+}
+
+function statusBadge(status) {
+  if (status === "published") return { label: "Published", cls: "badge-green" };
+  if (status === "draft") return { label: "Draft", cls: "badge-gray" };
+  return { label: status || "Unknown", cls: "badge-amber" };
+}
+
+function Sidebar({ page, setPage, activePlaybook }) {
   return (
     <aside style={{
       position: "fixed", left: 0, top: 0,
@@ -229,13 +232,14 @@ function Sidebar({ page, setPage }) {
       zIndex: 50, borderRight: `1px solid ${C.sidebarBorder}`,
     }}>
       <div style={{ padding: "24px 20px 20px", borderBottom: `1px solid ${C.sidebarBorder}` }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <img src={logoUrl} alt="LOU Legal" style={{ height: 42, width: "auto", filter: "brightness(0) invert(1)" }} />
+        <img src={logoUrl} alt="LOU Legal" style={{ height: 42, width: "auto", filter: "brightness(0) invert(1)" }} />
+        <div style={{ color: "rgba(255,255,255,.68)", fontSize: 11, marginTop: 10, lineHeight: 1.4 }}>
+          {activePlaybook ? activePlaybook.name : "No playbook selected"}
         </div>
       </div>
 
       <nav style={{ flex: 1, padding: "12px 0", display: "flex", flexDirection: "column", gap: 2 }}>
-        {NAV_ITEMS.map(item => (
+        {NAV_ITEMS.map((item) => (
           <button
             key={item.id}
             className={`sidebar-link ${page === item.id ? "active" : ""}`}
@@ -254,8 +258,8 @@ function Sidebar({ page, setPage }) {
             background: C.tealLight, display: "flex", alignItems: "center", justifyContent: "center",
             color: "#fff", fontSize: 12, fontWeight: 700, flexShrink: 0,
           }}>KM</div>
-          <div style={{ overflow: "hidden" }}>
-            <div style={{ color: "#fff", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Klaus Müller</div>
+          <div>
+            <div style={{ color: "#fff", fontSize: 12, fontWeight: 600 }}>Klaus Muller</div>
             <div style={{ color: "rgba(255,255,255,0.65)", fontSize: 11 }}>Senior Counsel</div>
           </div>
         </div>
@@ -264,8 +268,8 @@ function Sidebar({ page, setPage }) {
   );
 }
 
-function TopBar({ page }) {
-  const label = NAV_ITEMS.find(n => n.id === page)?.label || "";
+function TopBar({ page, onRefresh, loading }) {
+  const label = NAV_ITEMS.find((item) => item.id === page)?.label || "";
   return (
     <header style={{
       position: "fixed", top: 0, left: 220, right: 0, height: 60,
@@ -278,58 +282,29 @@ function TopBar({ page }) {
         <span style={{ color: C.textLight, fontSize: 14 }}>/</span>
         <span style={{ fontWeight: 600, fontSize: 14, color: C.teal }}>{label}</span>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-        <button style={{
-          width: 34, height: 34, borderRadius: "50%",
-          background: C.bg, border: `1px solid ${C.border}`,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          cursor: "pointer",
-        }}>
-          <Icon name="notifications" size={18} style={{ color: C.textMuted }} />
-        </button>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 500, color: C.textMuted }}>Dr. A. Schmidt</span>
-          <div style={{
-            width: 32, height: 32, borderRadius: "50%",
-            background: C.teal, display: "flex", alignItems: "center", justifyContent: "center",
-            color: "#fff", fontSize: 12, fontWeight: 700,
-          }}>AS</div>
-        </div>
-      </div>
+      <button className="btn-ghost" onClick={onRefresh} disabled={loading}>
+        <Icon name="refresh" size={17} />
+        {loading ? "Refreshing..." : "Refresh"}
+      </button>
     </header>
   );
 }
 
 function PageWrap({ children }) {
   return (
-    <main style={{
-      marginLeft: 220, paddingTop: 60,
-      minHeight: "100vh", background: C.bg,
-    }}>
-      <div style={{ padding: "32px 32px 48px", maxWidth: 1300, margin: "0 auto" }}>
+    <main style={{ marginLeft: 220, paddingTop: 60, minHeight: "100vh", background: C.bg }}>
+      <div style={{ padding: "32px 32px 48px", maxWidth: 1320, margin: "0 auto" }}>
         {children}
       </div>
     </main>
   );
 }
 
-const PLAYBOOKS = [
-  { id: 1, status: "approved", title: "NDA Playbook — ACME Corp", desc: "Standard NDA framework for ACME Corp partnership 2024.", clauses: 14, date: "Oct 12, 2023" },
-  { id: 2, status: "in_review", title: "Master Services — Global Logistics", desc: "Complex logistics agreement covering multi-region shipping and handling protocols.", clauses: 42, date: "Yesterday" },
-  { id: 3, status: "draft", title: "NDA Playbook — Supplier X", desc: "Preliminary draft for new supplier onboarding process in the DACH region.", clauses: 12, date: "Oct 05, 2023" },
-];
-
-const STATUS_CONFIG = {
-  approved: { label: "Approved", cls: "badge-green" },
-  in_review: { label: "In Review", cls: "badge-amber" },
-  draft: { label: "Draft", cls: "badge-gray" },
-};
-
-function HomePage({ setPage }) {
+function HomePage({ playbooks, activeId, setActiveId, setPage }) {
   return (
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 28 }}>
-        <div style={{ animation: "fadeUp 0.4s ease both" }}>
+        <div style={{ animation: "fadeUp .4s ease both" }}>
           <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 4 }}>Main / My Playbooks</div>
           <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.02em", color: C.text }}>My Playbooks</h1>
         </div>
@@ -337,126 +312,141 @@ function HomePage({ setPage }) {
           <Icon name="add" size={17} /> New Playbook
         </button>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
-        {PLAYBOOKS.map((pb, i) => {
-          const sc = STATUS_CONFIG[pb.status];
-          return (
-            <div key={pb.id} className="card" style={{ padding: 20, animationDelay: `${i * 70}ms`, animation: "fadeUp 0.4s ease both" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                <span className={`badge ${sc.cls}`}>{sc.label}</span>
-                <button style={{ background: "none", border: "none", cursor: "pointer", color: C.textLight, padding: 2 }}>
-                  <Icon name="more_horiz" size={18} />
-                </button>
-              </div>
-              <h3 style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 8, lineHeight: 1.4 }}>{pb.title}</h3>
-              <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.5, marginBottom: 16 }}>{pb.desc}</p>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ display: "flex", gap: 14 }}>
+
+      {playbooks.length === 0 ? (
+        <EmptyState title="No playbooks yet" body="Upload the Siemens sample playbook to create the first governed API module." action="Upload playbook" onAction={() => setPage("upload")} />
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 20 }}>
+          {playbooks.map((pb, index) => {
+            const badge = statusBadge(pb.status);
+            const issues = openIssues(pb).length;
+            return (
+              <button
+                key={pb.playbook_id}
+                className="card"
+                onClick={() => { setActiveId(pb.playbook_id); setPage("verification"); }}
+                style={{
+                  padding: 20,
+                  animationDelay: `${index * 70}ms`,
+                  animation: "fadeUp .4s ease both",
+                  textAlign: "left",
+                  cursor: "pointer",
+                  borderColor: activeId === pb.playbook_id ? C.teal : C.border,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                  <span className={`badge ${badge.cls}`}>{badge.label}</span>
+                  <span style={{ fontSize: 12, color: C.textLight }}>v{pb.version}</span>
+                </div>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 8, lineHeight: 1.4 }}>{pb.name}</h3>
+                <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.5, marginBottom: 16 }}>{pb.description || "No description."}</p>
+                <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 12, color: C.textMuted, display: "flex", alignItems: "center", gap: 4 }}>
-                    <Icon name="segment" size={14} /> {pb.clauses} Clauses
+                    <Icon name="segment" size={14} /> {pb.clauses.length} clauses
                   </span>
-                  <span style={{ fontSize: 12, color: C.textMuted, display: "flex", alignItems: "center", gap: 4 }}>
-                    <Icon name="calendar_today" size={14} /> {pb.date}
+                  <span style={{ fontSize: 12, color: issues ? C.amber : C.textMuted, display: "flex", alignItems: "center", gap: 4 }}>
+                    <Icon name={issues ? "warning" : "check_circle"} size={14} /> {issues} open issues
                   </span>
                 </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </>
   );
 }
 
-function UploadPage({ setPage }) {
-  const [step, setStep] = useState(1);
-  const [over, setOver] = useState(false);
-  const [file, setFile] = useState({ name: "Siemens_GTC_Playbook_v2.4.docx", size: "2.4 MB" });
-  const [analyzing, setAnalyzing] = useState(false);
+function UploadPage({ setPage, onUploaded }) {
+  const [file, setFile] = useState(null);
+  const [owner, setOwner] = useState("Peter");
+  const [name, setName] = useState("NDA Playbook");
+  const [description, setDescription] = useState("Siemens-style negotiation playbook");
+  const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [error, setError] = useState("");
 
-  function analyze() {
-    setAnalyzing(true);
-    setStep(2);
-    let p = 0;
-    const iv = setInterval(() => {
-      p += Math.random() * 18;
-      if (p >= 100) { p = 100; clearInterval(iv); setTimeout(() => { setStep(3); setPage("verification"); }, 600); }
-      setProgress(Math.min(100, p));
-    }, 250);
+  async function submit() {
+    if (!file) {
+      setError("Choose an .xlsx playbook first.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setProgress(18);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("owner", owner);
+      form.append("name", name);
+      form.append("description", description);
+      setProgress(48);
+      const result = await api("/playbooks/upload", { method: "POST", body: form });
+      setProgress(82);
+      const analyzed = await api(`/analysis/playbook/${result.playbook.playbook_id}`, { method: "POST" });
+      setProgress(100);
+      onUploaded(analyzed);
+      setTimeout(() => setPage("verification"), 250);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
   }
-
-  const steps = ["Upload File", "Analyze", "Verify Clauses"];
 
   return (
     <>
-      <div style={{ animation: "fadeUp 0.4s ease both", marginBottom: 32 }}>
+      <div style={{ animation: "fadeUp .4s ease both", marginBottom: 32 }}>
         <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.02em", color: C.teal, marginBottom: 6 }}>Upload Playbook</h1>
-        <p style={{ color: C.textMuted, fontSize: 14 }}>Import your legal standards and guidelines to initialize automated clause verification.</p>
+        <p style={{ color: C.textMuted, fontSize: 14 }}>Import a Siemens-style spreadsheet and turn it into a draft playbook API.</p>
       </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0, marginBottom: 40, animation: "fadeUp 0.4s ease both", animationDelay: "80ms" }}>
-        {steps.map((s, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center" }}>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-              <div className={`step-circle ${i + 1 < step ? "step-complete" : i + 1 === step ? "step-active" : "step-pending"}`}>
-                {i + 1 < step ? <Icon name="check" size={16} /> : i + 1}
-              </div>
-              <span style={{ fontSize: 12, fontWeight: 600, color: i + 1 === step ? C.teal : C.textMuted, whiteSpace: "nowrap" }}>{i + 1}. {s}</span>
-            </div>
-            {i < steps.length - 1 && (
-              <div style={{ width: 120, height: 2, background: i + 1 < step ? C.green : C.border, margin: "0 8px", marginBottom: 24 }} />
-            )}
-          </div>
-        ))}
-      </div>
-      <div className="card" style={{ padding: 40, animation: "fadeUp 0.4s ease both", animationDelay: "160ms" }}>
-        <div
-          className={`drag-zone ${over ? "over" : ""}`}
-          onDragOver={e => { e.preventDefault(); setOver(true); }}
-          onDragLeave={() => setOver(false)}
-          onDrop={e => { e.preventDefault(); setOver(false); }}
-        >
+
+      <div className="card" style={{ padding: 36, animation: "fadeUp .4s ease both" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 22 }}>
+          <label>
+            <div className="field-label">Playbook name</div>
+            <input className="form-field" value={name} onChange={(event) => setName(event.target.value)} />
+          </label>
+          <label>
+            <div className="field-label">Owner</div>
+            <input className="form-field" value={owner} onChange={(event) => setOwner(event.target.value)} />
+          </label>
+          <label style={{ gridColumn: "1 / -1" }}>
+            <div className="field-label">Description</div>
+            <textarea className="form-field" rows={3} value={description} onChange={(event) => setDescription(event.target.value)} />
+          </label>
+        </div>
+
+        <label className="drag-zone">
+          <input type="file" accept=".xlsx" style={{ display: "none" }} onChange={(event) => setFile(event.target.files?.[0] || null)} />
           <div style={{ width: 56, height: 56, borderRadius: "50%", background: C.tealXLight, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Icon name="cloud_upload" size={28} style={{ color: C.teal }} />
           </div>
           <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 4 }}>Drag & drop your file here</div>
-            <div style={{ fontSize: 13, color: C.textMuted }}>Supported formats: .xlsx, .docx, .pdf (Max 25MB)</div>
-          </div>
-          <button style={{ fontSize: 13, color: C.teal, fontWeight: 600, border: "none", background: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
-            or browse files <Icon name="open_in_new" size={14} />
-          </button>
-        </div>
-        {file && (
-          <div style={{ marginTop: 24, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 36, height: 36, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Icon name="description" size={18} style={{ color: C.teal }} />
-              </div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{file.name}</div>
-                <div style={{ fontSize: 12, color: C.textMuted }}>{file.size} · Ready to analyze</div>
-              </div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>
+              {file ? file.name : "Choose the playbook spreadsheet"}
             </div>
-            <button style={{ background: "none", border: "none", cursor: "pointer", color: C.red }} onClick={() => setFile(null)}>
-              <Icon name="delete" size={18} />
-            </button>
+            <div style={{ fontSize: 13, color: C.textMuted }}>Expected format: Clause #, Clause Name, Why It Matters, Preferred, Fallback 1, Fallback 2, Red Line, Escalation.</div>
           </div>
-        )}
-        {analyzing && (
+        </label>
+
+        {busy && (
           <div style={{ marginTop: 20 }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-              <span style={{ fontSize: 13, color: C.textMuted, fontWeight: 500 }}>Analyzing clauses…</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: C.teal }}>{Math.round(progress)}%</span>
+              <span style={{ fontSize: 13, color: C.textMuted, fontWeight: 500 }}>Uploading and running first logic check...</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.teal }}>{progress}%</span>
             </div>
             <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${progress}%`, transition: "width 0.25s ease" }} />
+              <div className="progress-fill" style={{ width: `${progress}%`, transition: "width .25s ease" }} />
             </div>
           </div>
         )}
-        <div style={{ display: "flex", justifyContent: "center", marginTop: 32 }}>
-          <button className="btn-primary" style={{ fontSize: 15, padding: "12px 36px" }} onClick={analyze} disabled={!file || analyzing}>
-            {analyzing ? <><Icon name="hourglass_empty" size={17} /> Processing…</> : <><Icon name="analytics" size={17} /> Analyze Playbook</>}
+
+        {error && <p style={{ color: C.red, fontSize: 13, marginTop: 16 }}>{error}</p>}
+
+        <div style={{ display: "flex", justifyContent: "center", marginTop: 30 }}>
+          <button className="btn-primary" style={{ fontSize: 15, padding: "12px 36px" }} onClick={submit} disabled={!file || busy}>
+            {busy ? <><Icon name="hourglass_empty" size={17} /> Processing...</> : <><Icon name="analytics" size={17} /> Create API draft</>}
           </button>
         </div>
       </div>
@@ -464,202 +454,436 @@ function UploadPage({ setPage }) {
   );
 }
 
-const CLAUSES_VER = [
-  { id: "01", name: "Type of NDA", why: "Defines scope of confidentiality obligations between parties.", pref: "MUTUAL", fallback: "UNILATERAL (SIEMENS)", redline: "UNILATERAL (THIRD PARTY)" },
-  { id: "02", name: "Marking of Confidential Information", why: "Requirement to label data as 'Confidential' to be protected.", pref: "NO MARKING REQUIRED", fallback: "WRITTEN CONFIRMATION", redline: "STRICT MARKING" },
-  { id: "03", name: "Intellectual Property Rights", why: "Protects ownership of underlying technologies and trade secrets.", pref: "OWNERSHIP RETAINED", fallback: "LIMITED USAGE LICENSE", redline: "JOINT OWNERSHIP" },
-  { id: "04", name: "Choice of Law", why: "Jurisdiction and governing law for dispute resolution.", pref: "GERMAN LAW", fallback: "SWISS/UK LAW", redline: "US STATE LAW" },
-  { id: "05", name: "Period of Confidentiality", why: "Duration after termination that info remains protected.", pref: "5+ YEARS", fallback: "3 YEARS", redline: "1 YEAR" },
-  { id: "06", name: "Permitted Purpose", why: "Specific use cases for shared confidential information.", pref: "SPECIFIC PROJECT", fallback: "EVAL BUSINESS OPT", redline: "GENERAL PURPOSE" },
-  { id: "07", name: "Return or Destroy", why: "Obligation to handle data upon termination.", pref: "SIEMENS OPTION", fallback: "DESTROY ONLY", redline: "NO OBLIGATION" },
-];
+function VerificationPage({ playbook, setPage, onPlaybookUpdate }) {
+  const [checkedRows, setCheckedRows] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
-function VerificationPage({ setPage }) {
-  const [checkedRows, setCheckedRows] = useState(
-    CLAUSES_VER.reduce((acc, c, i) => ({ ...acc, [c.id]: i < 5 }), {})
-  );
+  useEffect(() => {
+    if (!playbook) return;
+    setCheckedRows((current) => {
+      const next = { ...current };
+      playbook.clauses.forEach((clause) => {
+        if (!(clause.clause_id in next)) next[clause.clause_id] = clause.analysis_status === "clean";
+      });
+      return next;
+    });
+  }, [playbook]);
 
-  const toggleCheck = (id) => setCheckedRows(prev => ({ ...prev, [id]: !prev[id] }));
-  const handleEdit = (id) => alert(`Editing clause ${id}`);
+  if (!playbook) {
+    return <EmptyState title="Upload a playbook first" body="Clause verification needs a draft playbook." action="Upload playbook" onAction={() => setPage("upload")} />;
+  }
 
-  const total = CLAUSES_VER.length;
-  const verifiedCount = Object.values(checkedRows).filter(Boolean).length;
-  const pct = (verifiedCount / total) * 100;
+  async function runAnalysis() {
+    setBusy(true);
+    setError("");
+    try {
+      const updated = await api(`/analysis/playbook/${playbook.playbook_id}`, { method: "POST" });
+      onPlaybookUpdate(updated);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const total = playbook.clauses.length;
+  const verifiedCount = playbook.clauses.filter((clause) => checkedRows[clause.clause_id]).length;
+  const pct = total ? (verifiedCount / total) * 100 : 0;
+  const issues = openIssues(playbook);
 
   return (
-    <>
-      <div className="card" style={{ padding: 24, animation: "fadeUp 0.35s ease both" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-          <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700 }}>Clause Verification</h1>
-            <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>{verifiedCount} / {total} clauses verified</div>
-          </div>
-          <button className="btn-primary" onClick={() => setPage("knowledge")} style={{ opacity: verifiedCount < total ? 0.5 : 1 }}>
-            Proceed to Overview <Icon name="arrow_forward" size={16} />
+    <div className="card" style={{ padding: 24, animation: "fadeUp .35s ease both" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700 }}>Clause Verification</h1>
+          <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>{verifiedCount} / {total} clauses manually checked</div>
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button className="btn-ghost" onClick={runAnalysis} disabled={busy}>
+            <Icon name="rule" size={16} />
+            {busy ? "Checking..." : "Run logic analysis"}
+          </button>
+          <button className="btn-primary" onClick={() => setPage(issues.length ? "knowledge" : "graph")}>
+            {issues.length ? "Review suggestions" : "Continue to graph"} <Icon name="arrow_forward" size={16} />
           </button>
         </div>
-        <div className="progress-bar" style={{ marginBottom: 24 }}>
-          <div className="progress-fill" style={{ width: `${pct}%`, transition: "width 0.3s ease" }} />
+      </div>
+      <div className="progress-bar" style={{ marginBottom: 20 }}>
+        <div className="progress-fill" style={{ width: `${pct}%`, transition: "width .3s ease" }} />
+      </div>
+      {error && <p style={{ color: C.red, fontSize: 13, marginBottom: 14 }}>{error}</p>}
+      {issues.length > 0 && (
+        <div style={{ background: C.amberLight, border: "1px solid #FED7AA", borderRadius: 8, padding: 12, marginBottom: 18, color: "#7A4B00", fontSize: 13 }}>
+          Lou found one review suggestion. Handle it in Knowledge Overview before pushing the API.
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.textMuted, marginBottom: 20 }}>
-          <span style={{ color: C.green, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-            <Icon name="check" size={14} /> 2. Analyze
-          </span>
-          <Icon name="arrow_forward" size={14} />
-          <span style={{ color: C.teal, fontWeight: 600 }}>3. Verify Clauses</span>
-        </div>
-        <div className="table-row" style={{ gridTemplateColumns: "40px 2fr 3fr 1.4fr 1.4fr 1.4fr 80px", padding: "8px 12px", background: C.bg, borderRadius: "7px 7px 0 0" }}>
-          {["#", "CLAUSE NAME", "WHY IT MATTERS", "PREFERRED POSITION", "FALLBACK", "RED LINE", "ACTIONS"].map(h => (
-            <div key={h} style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: "0.06em" }}>{h}</div>
-          ))}
-        </div>
-        {CLAUSES_VER.map((c, i) => (
-          <div key={c.id} className="table-row" style={{ gridTemplateColumns: "40px 2fr 3fr 1.4fr 1.4fr 1.4fr 80px", padding: "14px 12px", animationDelay: `${i * 40}ms`, animation: "fadeUp 0.35s ease both" }}>
-            <div style={{ fontSize: 12, color: C.textLight, fontFamily: "DM Mono, monospace", marginTop: 2 }}>{c.id}</div>
-            <div style={{ fontWeight: 600, fontSize: 13, color: C.text }}>{c.name}</div>
-            <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.4 }}>{c.why}</div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{c.pref}</div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: C.textMuted }}>{c.fallback}</div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: C.textMuted }}>{c.redline}</div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button onClick={() => toggleCheck(c.id)} style={{ background: checkedRows[c.id] ? C.greenLight : C.bg, border: `1px solid ${checkedRows[c.id] ? C.green : C.border}`, borderRadius: 6, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.15s ease" }} title="Verify Clause">
-                <Icon name="check" size={15} style={{ color: checkedRows[c.id] ? C.green : C.textLight }} />
-              </button>
-              <button onClick={() => handleEdit(c.id)} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }} title="Edit Clause">
-                <Icon name="edit" size={15} style={{ color: C.textMuted }} />
-              </button>
-            </div>
-          </div>
+      )}
+
+      <div className="table-row" style={{ gridTemplateColumns: "44px 1.3fr 1.4fr 1.3fr 1.2fr 1.2fr 1.4fr 70px", padding: "8px 12px", background: C.bg, borderRadius: "7px 7px 0 0" }}>
+        {["#", "Clause", "Why it matters", "Preferred", "Fallback 1", "Fallback 2", "Red line", "Check"].map((header) => (
+          <div key={header} style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: ".06em", textTransform: "uppercase" }}>{header}</div>
         ))}
       </div>
-    </>
-  );
-}
-
-const KO_CLAUSES = [
-  { id: "01", name: "Confidentiality Scope", desc: "Standard non-disclosure obligations for both parties regarding proprietary information.", ok: true },
-  { id: "11", name: "Liability Limitation", desc: "Aggregated liability cap set at 2.5x annual contract value, excluding gross negligence.", ok: false, conflict: true },
-  { id: "04", name: "Dispute Resolution", desc: "Multi-step dispute resolution including mediation before arbitration.", ok: true },
-  { id: "12", name: "Warranty Term", desc: "18-month warranty period from delivery date.", ok: false, conflict: true },
-];
-
-function KnowledgePage() {
-  const [selected, setSelected] = useState(KO_CLAUSES.find(c => c.conflict));
-  const [radioVal, setRadioVal] = useState("override");
-  const conflicts = KO_CLAUSES.filter(c => c.conflict).length;
-
-  return (
-    <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, animation: "fadeUp 0.35s ease both" }}>
-        <div>
-          <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.02em" }}>Clause Knowledge Overview</h1>
-          <p style={{ color: C.textMuted, fontSize: 14, marginTop: 4 }}>Review and reconcile playbook clauses with the existing knowledge graph.</p>
+      {playbook.clauses.map((clause, index) => (
+        <div key={clause.clause_id} className="table-row" style={{ gridTemplateColumns: "44px 1.3fr 1.4fr 1.3fr 1.2fr 1.2fr 1.4fr 70px", padding: "14px 12px", animationDelay: `${index * 35}ms`, animation: "fadeUp .35s ease both" }}>
+          <div style={{ fontSize: 12, color: C.textLight, fontFamily: "DM Mono, monospace" }}>{clause.clause_number}</div>
+          <div style={{ fontWeight: 700, fontSize: 13, color: clause.analysis_status === "issue" ? C.red : clause.analysis_status === "warning" ? "#9A6400" : C.text }}>{clause.clause_name}</div>
+          <CellText>{clause.why_it_matters}</CellText>
+          <CellText strong>{clause.preferred_position}</CellText>
+          <CellText>{clause.fallback_1 || "-"}</CellText>
+          <CellText>{clause.fallback_2 || "-"}</CellText>
+          <CellText>{clause.red_line || "-"}</CellText>
+          <button
+            onClick={() => setCheckedRows((current) => ({ ...current, [clause.clause_id]: !current[clause.clause_id] }))}
+            style={{ background: checkedRows[clause.clause_id] ? C.greenLight : C.bg, border: `1px solid ${checkedRows[clause.clause_id] ? C.green : C.border}`, borderRadius: 6, width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+            title="Mark checked"
+          >
+            <Icon name="check" size={15} style={{ color: checkedRows[clause.clause_id] ? "#008764" : C.textLight }} />
+          </button>
         </div>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "340px 1fr", gap: 24 }}>
-        <div className="card" style={{ padding: 0, overflow: "hidden", animation: "fadeUp 0.4s ease both", animationDelay: "80ms" }}>
-          <div style={{ padding: "14px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-              Playbook Clauses ({KO_CLAUSES.length})
-            </div>
-            <span className="badge badge-amber">{conflicts} conflicts</span>
-          </div>
-          <div style={{ overflowY: "auto", maxHeight: "calc(100vh - 260px)" }}>
-            {KO_CLAUSES.map((c, i) => (
-              <div key={c.id} className={`clause-item ${selected?.id === c.id ? "active" : ""} ${c.conflict ? "conflict" : ""}`} style={{ animationDelay: `${i * 30}ms`, animation: "fadeUp 0.35s ease both" }} onClick={() => setSelected(c)}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ fontSize: 13, fontWeight: c.conflict ? 600 : 500, color: c.conflict ? C.amber : C.text }}>Clause {c.id}: {c.name}</div>
-                  {c.ok && !c.conflict && <Icon name="check_circle" size={16} style={{ color: C.green }} />}
-                  {c.conflict && <Icon name="warning" size={16} style={{ color: C.amber }} />}
-                </div>
-                <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, lineHeight: 1.4 }}>{c.desc}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-        {selected && (
-          <div className="card" style={{ padding: 28, animation: "fadeIn 0.3s ease both", display: "flex", flexDirection: "column", gap: 20 }}>
-            <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-              {selected.conflict && (
-                <div style={{ width: 36, height: 36, borderRadius: 8, background: C.amberLight, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <Icon name="warning" size={20} style={{ color: C.amber }} />
-                </div>
-              )}
-              <div><h2 style={{ fontSize: 20, fontWeight: 700 }}>Clause {selected.id}: {selected.name}</h2></div>
-            </div>
-            {selected.conflict && (
-              <div style={{ background: "#FFF8F0", border: `1px solid #FED7AA`, borderRadius: 8, padding: 16 }}>
-                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                  <Icon name="info" size={16} style={{ color: C.amber }} /> Knowledge Graph Inconsistency
-                </div>
-                <div style={{ fontSize: 13, color: C.text, lineHeight: 1.5 }}>
-                  The proposed liability cap of <strong style={{ color: C.red }}>2.5x ACV</strong> conflicts with the established organizational standard for Tier 2 vendors, which is currently set at <strong style={{ color: C.teal }}>1.5x ACV</strong>.
-                </div>
-              </div>
-            )}
-            {selected.conflict && (
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>Reconciliation Suggestions</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {[
-                    { val: "align", title: "Align with Knowledge Graph", desc: "Update playbook clause to match the 1.5x ACV standard. High compliance, low risk." },
-                    { val: "override", title: "Override and Add to Knowledge Graph", desc: "Validate this as a new accepted variance for special project tiers. Updates the graph for future use." },
-                  ].map(opt => (
-                    <div key={opt.val} className={`radio-opt ${radioVal === opt.val ? "selected" : ""}`} onClick={() => setRadioVal(opt.val)}>
-                      <div style={{ width: 18, height: 18, borderRadius: "50%", border: `2px solid ${radioVal === opt.val ? C.teal : C.border}`, background: radioVal === opt.val ? C.teal : "transparent", flexShrink: 0, marginTop: 2, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        {radioVal === opt.val && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff" }} />}
-                      </div>
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{opt.title}</div>
-                        <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }}>{opt.desc}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </>
-  );
-}
-
-function GraphPage() {
-  return (
-    <div className="card" style={{ padding: 40, textAlign: "center", animation: "fadeUp 0.4s ease both" }}>
-      <Icon name="account_tree" size={48} style={{ color: C.teal, marginBottom: 16 }} />
-      <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text }}>Knowledge Graph</h2>
-      <p style={{ color: C.textMuted, marginTop: 8 }}>Interactive graph view placeholder.</p>
+      ))}
     </div>
   );
 }
 
-const NAV_ITEMS = [
-  { id: "home", label: "Home", icon: "home" },
-  { id: "upload", label: "Upload Playbook", icon: "upload_file" },
-  { id: "verification", label: "Clause Verification", icon: "fact_check" },
-  { id: "knowledge", label: "Knowledge Overview", icon: "description" },
-  { id: "graph", label: "Knowledge Graph", icon: "account_tree" },
-];
+function KnowledgePage({ playbook, setPage, onPlaybookUpdate }) {
+  const issues = openIssues(playbook);
+  const [selectedId, setSelectedId] = useState(null);
+  const [busyIssueId, setBusyIssueId] = useState(null);
+  const selected = issues.find((issue) => issue.id === selectedId) || issues[0] || null;
+
+  useEffect(() => {
+    if (selected && selected.id !== selectedId) setSelectedId(selected.id);
+  }, [selected, selectedId]);
+
+  if (!playbook) {
+    return <EmptyState title="Upload a playbook first" body="Knowledge overview needs a draft or published playbook." action="Upload playbook" onAction={() => setPage("upload")} />;
+  }
+
+  async function handleIssue(issue, action) {
+    setBusyIssueId(issue.id);
+    try {
+      const updated = await api(`/analysis/issues/${issue.id}/${action}`, { method: "POST" });
+      onPlaybookUpdate(updated);
+      setSelectedId(null);
+    } finally {
+      setBusyIssueId(null);
+    }
+  }
+
+  return (
+    <>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, animation: "fadeUp .35s ease both" }}>
+        <div>
+          <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.02em" }}>Clause Knowledge Overview</h1>
+          <p style={{ color: C.textMuted, fontSize: 14, marginTop: 4 }}>Review Lou's issue queue before the playbook becomes an API.</p>
+        </div>
+        <button className="btn-primary" onClick={() => setPage("graph")}>
+          Continue to graph <Icon name="arrow_forward" size={16} />
+        </button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "340px 1fr", gap: 24 }}>
+        <div className="card" style={{ padding: 0, overflow: "hidden", animation: "fadeUp .4s ease both" }}>
+          <div style={{ padding: "14px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, letterSpacing: ".06em", textTransform: "uppercase" }}>Review queue</div>
+            <span className={`badge ${issues.length ? "badge-amber" : "badge-green"}`}>{issues.length} open</span>
+          </div>
+          <div style={{ overflowY: "auto", maxHeight: "calc(100vh - 260px)" }}>
+            {playbook.clauses.map((clause) => {
+              const issue = issues.find((item) => item.clause.clause_id === clause.clause_id);
+              return (
+                <div key={clause.clause_id} className={`clause-item ${selected?.clause.clause_id === clause.clause_id ? "active" : ""} ${issue ? "conflict" : ""}`} onClick={() => issue && setSelectedId(issue.id)}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ fontSize: 13, fontWeight: issue ? 700 : 500, color: issue ? C.amber : C.text }}>Clause {clause.clause_number}: {clause.clause_name}</div>
+                    <Icon name={issue ? "warning" : "check_circle"} size={16} style={{ color: issue ? C.amber : C.green }} />
+                  </div>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, lineHeight: 1.4 }}>{clause.why_it_matters}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: 28, animation: "fadeUp .35s ease both", minHeight: 360 }}>
+          {selected ? (
+            <>
+              <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 18 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: selected.severity === "critical" ? C.redLight : C.amberLight, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Icon name="warning" size={20} style={{ color: selected.severity === "critical" ? C.red : C.amber }} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: 20, fontWeight: 700 }}>{selected.clause.clause_name}</h2>
+                  <span className={`badge ${selected.severity === "critical" ? "badge-red" : "badge-amber"}`}>{selected.severity}</span>
+                </div>
+              </div>
+              <div style={{ background: selected.severity === "critical" ? C.redLight : C.amberLight, border: `1px solid ${selected.severity === "critical" ? "#F3B5BC" : "#FED7AA"}`, borderRadius: 8, padding: 16, marginBottom: 18 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>{selected.issue_type}</div>
+                <div style={{ fontSize: 13, color: C.text, lineHeight: 1.5 }}>{selected.explanation}</div>
+              </div>
+              <div style={{ marginBottom: 18 }}>
+                <div className="field-label">Proposed fix</div>
+                <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, fontSize: 13, lineHeight: 1.55, color: C.textMuted }}>{selected.proposed_fix || "No automatic fix available."}</div>
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button className="btn-ghost" disabled={busyIssueId === selected.id} onClick={() => handleIssue(selected, "reject")}>
+                  <Icon name="close" size={16} /> Reject
+                </button>
+                <button className="btn-primary" disabled={!selected.proposed_fix || busyIssueId === selected.id} onClick={() => handleIssue(selected, "accept-fix")}>
+                  <Icon name="check" size={16} /> Accept fix
+                </button>
+              </div>
+            </>
+          ) : (
+            <EmptyState title="No open suggestions" body="The playbook is ready for visual inspection in the graph." action="Continue to graph" onAction={() => setPage("graph")} compact />
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function GraphPage({ playbook, setPage, onPlaybookUpdate }) {
+  const [brain, setBrain] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [committedBy, setCommittedBy] = useState("Peter");
+  const [comment, setComment] = useState("");
+  const [committed, setCommitted] = useState(false);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!playbook) return;
+    let cancelled = false;
+    api(`/playbooks/${playbook.playbook_id}/brain`)
+      .then((data) => { if (!cancelled) { setBrain(data); setSelected(data.nodes[0] || null); } })
+      .catch((err) => { if (!cancelled) setMessage(err.message); });
+    return () => { cancelled = true; };
+  }, [playbook]);
+
+  if (!playbook) {
+    return <EmptyState title="Upload a playbook first" body="The graph shows the current playbook as a mini brain." action="Upload playbook" onAction={() => setPage("upload")} />;
+  }
+
+  function commitDraft() {
+    if (!committedBy.trim() || !comment.trim()) {
+      setMessage("Add a committer name and comment before committing.");
+      return;
+    }
+    setCommitted(true);
+    setMessage("Committed locally. Push when this playbook should become an API.");
+  }
+
+  async function pushApi() {
+    if (!committed) {
+      setMessage("Commit before pushing to the company brain.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await api(`/playbooks/${playbook.playbook_id}/publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ committed_by: committedBy, comment }),
+      });
+      onPlaybookUpdate(result.playbook);
+      setMessage(`Pushed ${result.mega_brain_entries} clauses to the company brain. Commit ${result.commit_hash}.`);
+    } catch (err) {
+      setMessage(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const layout = useMemo(() => computeGraphLayout(brain), [brain]);
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 330px", gap: 24 }}>
+      <div className="card" style={{ padding: 24, minHeight: 650, animation: "fadeUp .4s ease both" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div>
+            <h2 style={{ fontSize: 20, fontWeight: 800 }}>Knowledge Graph</h2>
+            <p style={{ color: C.textMuted, fontSize: 13, marginTop: 4 }}>Each clause is a mini hierarchy: preferred, fallbacks, red line, escalation.</p>
+          </div>
+          <span className={`badge ${playbook.status === "published" ? "badge-green" : "badge-gray"}`}>{playbook.status}</span>
+        </div>
+        {brain ? (
+          <svg viewBox="0 0 980 590" width="100%" height="590" role="img" aria-label="Playbook mini brain">
+            <rect x="0" y="0" width="980" height="590" rx="12" fill="#F9FBFB" />
+            {layout.edges.map((edge, index) => {
+              const source = layout.points.get(edge.source);
+              const target = layout.points.get(edge.target);
+              if (!source || !target) return null;
+              return (
+                <line
+                  key={`${edge.source}-${edge.target}-${index}`}
+                  x1={source.x}
+                  y1={source.y}
+                  x2={target.x}
+                  y2={target.y}
+                  stroke={edge.relationship === "playbook_hierarchy" ? "rgba(0,100,110,.22)" : "rgba(63,72,74,.12)"}
+                  strokeWidth={edge.relationship === "playbook_hierarchy" ? 1.5 : 1}
+                />
+              );
+            })}
+            {layout.nodes.map((node) => {
+              const point = layout.points.get(node.id);
+              if (!point) return null;
+              const isSelected = selected?.id === node.id;
+              const radius = node.node_type === "clause" ? 13 : 8;
+              return (
+                <g key={node.id} onClick={() => setSelected(node)} style={{ cursor: "pointer" }}>
+                  <circle cx={point.x} cy={point.y} r={isSelected ? radius + 5 : radius + 2} fill={isSelected ? "rgba(0,100,110,.14)" : "transparent"} />
+                  <circle cx={point.x} cy={point.y} r={radius} fill={node.color} stroke="#fff" strokeWidth="2" />
+                  <text x={point.x} y={point.y + radius + 14} textAnchor="middle" className="node-label">{node.node_type === "clause" ? node.label : node.label}</text>
+                </g>
+              );
+            })}
+          </svg>
+        ) : (
+          <EmptyState title="Loading graph" body="Lou is computing the playbook brain." compact />
+        )}
+      </div>
+
+      <aside className="card" style={{ padding: 22, animation: "fadeUp .4s ease both" }}>
+        <div style={{ marginBottom: 20 }}>
+          <div className="field-label">Selected node</div>
+          <h2 style={{ fontSize: 18, marginBottom: 8 }}>{selected?.label || "Select a node"}</h2>
+          <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.55 }}>{selected?.text || selected?.clause?.preferred_position || "Click a graph node to inspect it."}</p>
+          {selected && <span className="badge badge-teal" style={{ marginTop: 12 }}>{selected.node_type}</span>}
+        </div>
+
+        <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 18 }}>
+          <div className="field-label">Publish control</div>
+          <label style={{ display: "block", marginBottom: 12 }}>
+            <div className="field-label">Committer</div>
+            <input className="form-field" value={committedBy} onChange={(event) => setCommittedBy(event.target.value)} />
+          </label>
+          <label style={{ display: "block", marginBottom: 12 }}>
+            <div className="field-label">Commit comment</div>
+            <textarea className="form-field" rows={4} value={comment} onChange={(event) => { setComment(event.target.value); setCommitted(false); }} placeholder="Explain why this playbook is ready." />
+          </label>
+          <div style={{ display: "grid", gap: 10 }}>
+            <button className="btn-ghost" disabled={busy || committed} onClick={commitDraft}>
+              <Icon name="commit" size={16} /> {committed ? "Committed" : "Commit"}
+            </button>
+            <button className="btn-primary" disabled={busy || !committed} onClick={pushApi}>
+              <Icon name="send" size={16} /> {busy ? "Pushing..." : "Push to API"}
+            </button>
+          </div>
+          {message && <p style={{ color: message.includes("Pushed") || message.includes("Committed") ? C.teal : C.red, fontSize: 12, lineHeight: 1.5, marginTop: 12 }}>{message}</p>}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function CellText({ children, strong = false }) {
+  return <div style={{ fontSize: 12, fontWeight: strong ? 700 : 500, color: strong ? C.text : C.textMuted, lineHeight: 1.45 }}>{children}</div>;
+}
+
+function EmptyState({ title, body, action, onAction, compact = false }) {
+  return (
+    <div className="card" style={{ padding: compact ? 24 : 40, textAlign: "center", animation: "fadeUp .4s ease both" }}>
+      <Icon name="info" size={compact ? 30 : 46} style={{ color: C.teal, marginBottom: 14 }} />
+      <h2 style={{ fontSize: compact ? 18 : 22, fontWeight: 800 }}>{title}</h2>
+      <p style={{ color: C.textMuted, margin: "8px auto 18px", maxWidth: 520, lineHeight: 1.5 }}>{body}</p>
+      {action && <button className="btn-primary" onClick={onAction}>{action}</button>}
+    </div>
+  );
+}
+
+function computeGraphLayout(brain) {
+  const nodes = brain?.nodes || [];
+  const edges = brain?.edges || [];
+  const points = new Map();
+  const clauseNodes = nodes.filter((node) => node.node_type === "clause");
+  const centerX = 490;
+  const centerY = 295;
+  const rx = 330;
+  const ry = 205;
+
+  clauseNodes.forEach((node, index) => {
+    const angle = (Math.PI * 2 * index) / Math.max(1, clauseNodes.length) - Math.PI / 2;
+    const x = centerX + Math.cos(angle) * rx;
+    const y = centerY + Math.sin(angle) * ry;
+    points.set(node.id, { x, y });
+
+    const children = nodes.filter((candidate) => candidate.id.startsWith(`${node.id}:`));
+    children.forEach((child, childIndex) => {
+      const childAngle = angle + (childIndex - 2) * 0.15;
+      const distance = 48 + childIndex * 13;
+      points.set(child.id, {
+        x: x + Math.cos(childAngle) * distance,
+        y: y + Math.sin(childAngle) * distance,
+      });
+    });
+  });
+
+  return { nodes, edges, points };
+}
 
 export default function App() {
   const [page, setPage] = useState("home");
-  useEffect(() => { document.title = "LOU Legal Workspace"; }, []);
+  const [playbooks, setPlaybooks] = useState([]);
+  const [activeId, setActiveId] = useState(() => window.localStorage.getItem("lou.frontend.activePlaybookId") || "");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const activePlaybook = playbooks.find((playbook) => playbook.playbook_id === activeId) || playbooks[0] || null;
+
+  useEffect(() => {
+    document.title = "LOU Legal Workspace";
+    refreshPlaybooks();
+  }, []);
+
+  useEffect(() => {
+    if (activePlaybook?.playbook_id) {
+      window.localStorage.setItem("lou.frontend.activePlaybookId", activePlaybook.playbook_id);
+      if (activeId !== activePlaybook.playbook_id) setActiveId(activePlaybook.playbook_id);
+    }
+  }, [activePlaybook, activeId]);
+
+  async function refreshPlaybooks() {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await api("/playbooks");
+      setPlaybooks(data);
+      if (!activeId && data[0]) setActiveId(data[0].playbook_id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function upsertPlaybook(playbook) {
+    setPlaybooks((current) => {
+      const without = current.filter((item) => item.playbook_id !== playbook.playbook_id);
+      return [playbook, ...without];
+    });
+    setActiveId(playbook.playbook_id);
+  }
+
   const pages = {
-    home: <HomePage setPage={setPage} />,
-    upload: <UploadPage setPage={setPage} />,
-    verification: <VerificationPage setPage={setPage} />,
-    knowledge: <KnowledgePage />,
-    graph: <GraphPage />,
+    home: <HomePage playbooks={playbooks} activeId={activeId} setActiveId={setActiveId} setPage={setPage} />,
+    upload: <UploadPage setPage={setPage} onUploaded={upsertPlaybook} />,
+    verification: <VerificationPage playbook={activePlaybook} setPage={setPage} onPlaybookUpdate={upsertPlaybook} />,
+    knowledge: <KnowledgePage playbook={activePlaybook} setPage={setPage} onPlaybookUpdate={upsertPlaybook} />,
+    graph: <GraphPage playbook={activePlaybook} setPage={setPage} onPlaybookUpdate={upsertPlaybook} />,
   };
+
   return (
     <>
       <style>{GLOBAL_CSS}</style>
       <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
-      <Sidebar page={page} setPage={setPage} />
-      <TopBar page={page} />
-      <PageWrap key={page}>{pages[page]}</PageWrap>
+      <Sidebar page={page} setPage={setPage} activePlaybook={activePlaybook} />
+      <TopBar page={page} onRefresh={refreshPlaybooks} loading={loading} />
+      <PageWrap>
+        {error && <div style={{ background: C.redLight, border: "1px solid #F3B5BC", color: C.red, borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 13 }}>{error}</div>}
+        {pages[page]}
+      </PageWrap>
     </>
   );
 }
