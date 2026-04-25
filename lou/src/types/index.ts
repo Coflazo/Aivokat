@@ -239,3 +239,98 @@ export interface MegaBrainSearchResult {
   document: string
   similarity: number
 }
+
+export interface PublicPlaybookListItem {
+  playbook_id: string
+  name: string
+  owner: string
+  version: number
+  published_at?: string | null
+  clause_count: number
+}
+
+export interface PublicCitation {
+  clause_id: string
+  clause_name: string
+  excerpt: string
+  confidence: number
+}
+
+export interface PublicAskResponse {
+  answer: string
+  citations: PublicCitation[]
+  confidence: number
+}
+
+export interface ScoreBreakdown {
+  dense_embedding_score: number
+  lexical_score: number
+  topic_alias_score: number
+  structural_score: number
+  final_score: number
+}
+
+export interface MatchClauseResponse {
+  matched_clause: PlaybookClause
+  matched_hierarchy_position: string
+  classification: string
+  explanation: string
+  score_breakdown: ScoreBreakdown
+}
+
+export interface SegmentedClause {
+  clause_id: string
+  heading?: string | null
+  text: string
+  start_page?: number | null
+  end_page?: number | null
+  boundary_confidence: number
+  boundary_reason: string
+  extraction_method: string
+}
+
+export interface SegmentedContract {
+  source_filename: string
+  clauses: SegmentedClause[]
+  segmentation_summary: string
+  low_confidence_count: number
+}
+
+export interface AnalyzedContractClause {
+  segmented_clause: SegmentedClause
+  match?: MatchClauseResponse | null
+}
+
+export interface ContractRiskHeatmap {
+  preferred_count: number
+  fallback_count: number
+  redline_count: number
+  escalation_count: number
+  unmapped_count: number
+}
+
+export interface AnalyzeContractResponse {
+  playbook_id: string
+  segmented_contract: SegmentedContract
+  clauses: AnalyzedContractClause[]
+  risk_heatmap: ContractRiskHeatmap
+  explanations: string[]
+}
+
+export interface SuggestRewriteResponse {
+  matched_clause_id: string
+  original: string
+  suggested_rewrite: string
+  explanation: string
+}
+
+export interface CoverageGap {
+  clause_id: string
+  heading?: string | null
+  text: string
+  reason: string
+}
+
+export interface CoverageGapsResponse {
+  gaps: CoverageGap[]
+}

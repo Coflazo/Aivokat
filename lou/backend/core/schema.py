@@ -374,6 +374,107 @@ class MegaBrainSearchResult(BaseModel):
     similarity: float
 
 
+class PublicPlaybookListItem(BaseModel):
+    playbook_id: str
+    name: str
+    owner: str
+    version: int
+    published_at: Optional[str] = None
+    clause_count: int
+
+
+class PublicAskRequest(BaseModel):
+    question: str
+
+
+class PublicCitation(BaseModel):
+    clause_id: str
+    clause_name: str
+    excerpt: str
+    confidence: float
+
+
+class PublicAskResponse(BaseModel):
+    answer: str
+    citations: list[PublicCitation]
+    confidence: float
+
+
+class ScoreBreakdown(BaseModel):
+    dense_embedding_score: float
+    lexical_score: float
+    topic_alias_score: float
+    structural_score: float
+    final_score: float
+
+
+class MatchClauseRequest(BaseModel):
+    clause_text: str
+    heading: Optional[str] = None
+
+
+class MatchClauseResponse(BaseModel):
+    matched_clause: PlaybookClauseView
+    matched_hierarchy_position: str
+    classification: str
+    explanation: str
+    score_breakdown: ScoreBreakdown
+
+
+class AnalyzeContractTextRequest(BaseModel):
+    text: str
+    source_filename: str = "pasted-contract.txt"
+
+
+class AnalyzedContractClause(BaseModel):
+    segmented_clause: SegmentedClause
+    match: Optional[MatchClauseResponse] = None
+
+
+class ContractRiskHeatmap(BaseModel):
+    preferred_count: int = 0
+    fallback_count: int = 0
+    redline_count: int = 0
+    escalation_count: int = 0
+    unmapped_count: int = 0
+
+
+class AnalyzeContractResponse(BaseModel):
+    playbook_id: str
+    segmented_contract: SegmentedContract
+    clauses: list[AnalyzedContractClause]
+    risk_heatmap: ContractRiskHeatmap
+    explanations: list[str]
+
+
+class SuggestRewriteRequest(BaseModel):
+    contract_clause: str
+    matched_clause_id: str
+
+
+class SuggestRewriteResponse(BaseModel):
+    matched_clause_id: str
+    original: str
+    suggested_rewrite: str
+    explanation: str
+
+
+class CoverageGapsRequest(BaseModel):
+    text: str
+    source_filename: str = "pasted-contract.txt"
+
+
+class CoverageGap(BaseModel):
+    clause_id: str
+    heading: Optional[str] = None
+    text: str
+    reason: str
+
+
+class CoverageGapsResponse(BaseModel):
+    gaps: list[CoverageGap]
+
+
 class RewriteCellRequest(BaseModel):
     playbook_id: str
     clause_id: str

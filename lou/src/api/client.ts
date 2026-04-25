@@ -6,16 +6,22 @@ import type {
   GraphData,
   MegaBrain,
   MegaBrainSearchResult,
+  AnalyzeContractResponse,
+  CoverageGapsResponse,
+  MatchClauseResponse,
   PlaybookApi,
   PlaybookBrain,
   PlaybookPatchResponse,
   PlaybookUploadResponse,
+  PublicAskResponse,
+  PublicPlaybookListItem,
   PublishPlaybookResponse,
   ProposedCommit,
   RewriteCellResponse,
   RewriteMode,
   RewritePlaybookResponse,
-  RewriteRowResponse
+  RewriteRowResponse,
+  SuggestRewriteResponse
 } from '../types'
 
 const api = axios.create({ baseURL: 'http://localhost:8000/api' })
@@ -154,6 +160,55 @@ export const fetchMegaBrain = (): Promise<MegaBrain> =>
 
 export const searchMegaBrain = (q: string): Promise<MegaBrainSearchResult[]> =>
   api.get('/mega-brain/search', { params: { q } }).then((r) => r.data)
+
+export const fetchPublicPlaybooks = (): Promise<PublicPlaybookListItem[]> =>
+  api.get('/public/playbooks').then((r) => r.data)
+
+export const fetchPublicPlaybookSchema = (playbookId: string): Promise<PlaybookApi> =>
+  api.get(`/public/playbooks/${playbookId}/schema`).then((r) => r.data)
+
+export const askPublicPlaybook = (playbookId: string, question: string): Promise<PublicAskResponse> =>
+  api.post(`/public/playbooks/${playbookId}/ask`, { question }).then((r) => r.data)
+
+export const matchPublicClause = (
+  playbookId: string,
+  clauseText: string,
+  heading = ''
+): Promise<MatchClauseResponse> =>
+  api.post(`/public/playbooks/${playbookId}/match-clause`, {
+    clause_text: clauseText,
+    heading: heading || null,
+  }).then((r) => r.data)
+
+export const analyzePublicContractText = (
+  playbookId: string,
+  text: string,
+  sourceFilename = 'pasted-contract.txt'
+): Promise<AnalyzeContractResponse> =>
+  api.post(`/public/playbooks/${playbookId}/analyze-contract`, {
+    text,
+    source_filename: sourceFilename,
+  }).then((r) => r.data)
+
+export const suggestPublicRewrite = (
+  playbookId: string,
+  contractClause: string,
+  matchedClauseId: string
+): Promise<SuggestRewriteResponse> =>
+  api.post(`/public/playbooks/${playbookId}/suggest-rewrite`, {
+    contract_clause: contractClause,
+    matched_clause_id: matchedClauseId,
+  }).then((r) => r.data)
+
+export const fetchCoverageGaps = (
+  playbookId: string,
+  text: string,
+  sourceFilename = 'pasted-contract.txt'
+): Promise<CoverageGapsResponse> =>
+  api.post(`/public/playbooks/${playbookId}/coverage-gaps`, {
+    text,
+    source_filename: sourceFilename,
+  }).then((r) => r.data)
 
 export const uploadContract = (file: File, lawyerName: string) => {
   const fd = new FormData()

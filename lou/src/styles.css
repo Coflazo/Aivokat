@@ -709,6 +709,100 @@ body {
   font-size: 11px;
 }
 
+.apiConsoleGrid {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(280px, .86fr) minmax(320px, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.apiPanel {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  background: rgba(255, 251, 243, .94);
+  border: 1px solid rgba(47, 42, 34, .13);
+  border-radius: 10px;
+  box-shadow: 0 24px 70px rgba(47, 42, 34, .1);
+}
+
+.apiPanel.wide {
+  grid-column: 1 / 2;
+}
+
+.apiPanelTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.apiPanel h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.18;
+  font-weight: 540;
+}
+
+.apiPanel textarea {
+  width: 100%;
+  min-height: 126px;
+  padding: 10px;
+  border: 1px solid rgba(47, 42, 34, .14);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .55);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  outline: none;
+  resize: vertical;
+}
+
+.apiPanel textarea:focus {
+  border-color: rgba(0, 153, 153, .46);
+}
+
+.apiButtonRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.apiButtonRow button {
+  padding: 0 12px;
+}
+
+.resultPanel {
+  grid-row: 1 / span 3;
+  grid-column: 2 / 3;
+  min-height: calc(100vh - 138px);
+}
+
+.resultPanel pre {
+  min-height: 0;
+  max-height: calc(100vh - 242px);
+  overflow: auto;
+  margin: 0;
+  padding: 14px;
+  color: #372f27;
+  background: rgba(230, 213, 187, .42);
+  border: 1px solid rgba(47, 42, 34, .1);
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.46;
+  white-space: pre-wrap;
+}
+
+.apiError {
+  position: relative;
+  z-index: 2;
+  margin: 0 0 12px;
+}
+
 .searchResultsKicker {
   margin-top: 18px;
 }
