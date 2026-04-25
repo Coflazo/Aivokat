@@ -178,6 +178,8 @@ export interface BrainNodeView {
   label: string
   status: ClauseAnalysisStatus
   color: string
+  node_type: 'clause' | 'preferred' | 'fallback_1' | 'fallback_2' | 'red_line' | 'escalation'
+  text: string
   island_id?: string | null
   clause: PlaybookClause
   x?: number

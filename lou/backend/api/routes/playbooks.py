@@ -291,24 +291,78 @@ def _load_playbook_view(playbook_id: str) -> PlaybookApiView:
 
 def _build_playbook_brain(playbook_id: str) -> PlaybookBrainView:
     view = _load_playbook_view(playbook_id)
-    nodes = [
-        BrainNodeView(
-            id=clause.clause_id,
-            label=clause.clause_name,
-            status=clause.analysis_status,
-            color=_status_color(clause.analysis_status, view.status),
-            island_id=view.playbook_id,
+    nodes: list[BrainNodeView] = []
+    hierarchy_edges: list[BrainEdgeView] = []
+    for clause in view.clauses:
+        nodes.append(_brain_node(
             clause=clause,
-        )
-        for clause in view.clauses
-    ]
+            node_id=clause.clause_id,
+            label=clause.clause_name,
+            node_type="clause",
+            text=clause.why_it_matters,
+            playbook_id=view.playbook_id,
+            playbook_status=view.status,
+        ))
+        hierarchy = [
+            ("preferred", "Preferred", clause.preferred_position, "#007c79"),
+            ("fallback_1", "Fallback 1", clause.fallback_1, "#9b6f43"),
+            ("fallback_2", "Fallback 2", clause.fallback_2, "#b98546"),
+            ("red_line", "Red line", clause.red_line, "#4a2430"),
+            ("escalation", "Escalation", clause.escalation_trigger, "#ec6602"),
+        ]
+        previous_id = clause.clause_id
+        for node_type, label, text, color in hierarchy:
+            if not text:
+                continue
+            child_id = f"{clause.clause_id}:{node_type}"
+            nodes.append(_brain_node(
+                clause=clause,
+                node_id=child_id,
+                label=label,
+                node_type=node_type,
+                text=text,
+                playbook_id=view.playbook_id,
+                playbook_status=view.status,
+                color=color,
+            ))
+            hierarchy_edges.append(BrainEdgeView(
+                source=previous_id,
+                target=child_id,
+                similarity=1.0,
+                relationship="playbook_hierarchy",
+                edge_scope="island",
+            ))
+            previous_id = child_id
+
     edges = _semantic_edges(view.clauses)
     return PlaybookBrainView(
         playbook_id=view.playbook_id,
         version=view.version,
         status=view.status,
         nodes=nodes,
-        edges=edges,
+        edges=[*hierarchy_edges, *edges],
+    )
+
+
+def _brain_node(
+    clause: PlaybookClauseView,
+    node_id: str,
+    label: str,
+    node_type: str,
+    text: str,
+    playbook_id: str,
+    playbook_status: PlaybookStatus,
+    color: str | None = None,
+) -> BrainNodeView:
+    return BrainNodeView(
+        id=node_id,
+        label=label,
+        status=clause.analysis_status,
+        color=color or _status_color(clause.analysis_status, playbook_status),
+        node_type=node_type,
+        text=text,
+        island_id=playbook_id,
+        clause=clause,
     )
 
 

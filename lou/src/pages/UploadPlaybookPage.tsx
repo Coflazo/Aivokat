@@ -2,8 +2,9 @@ import React from 'react'
 import { FileSpreadsheet, Upload } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { uploadApiPlaybook } from '../api/client'
+import { saveCurrentPlaybookId } from '../utils/currentPlaybook'
 
-export function UploadPlaybookPage(): JSX.Element {
+export function UploadPlaybookPage({ onUploaded }: { onUploaded?: (playbookId: string) => void }): JSX.Element {
   const navigate = useNavigate()
   const [file, setFile] = React.useState<File | null>(null)
   const [owner, setOwner] = React.useState('Peter')
@@ -23,6 +24,8 @@ export function UploadPlaybookPage(): JSX.Element {
     setError(null)
     try {
       const response = await uploadApiPlaybook(file, owner, name, description)
+      saveCurrentPlaybookId(response.playbook.playbook_id)
+      onUploaded?.(response.playbook.playbook_id)
       navigate(`/playbooks/${response.playbook.playbook_id}/edit`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed.')

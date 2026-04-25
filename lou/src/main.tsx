@@ -20,6 +20,7 @@ import {
 } from './pages'
 import { sourcePlaybookRows, type SourcePlaybookRow } from './playbookData'
 import type { GraphData as ApiGraphData, GraphNode as ApiGraphNode } from './types'
+import { getCurrentPlaybookId, saveCurrentPlaybookId } from './utils/currentPlaybook'
 import './styles.css'
 
 type PositionKind = 'preferred' | 'fallback' | 'negative'
@@ -641,6 +642,7 @@ function Shell(): JSX.Element {
   const [pendingCount, setPendingCount] = React.useState(0)
   const [uploadOpen, setUploadOpen] = React.useState(false)
   const [refreshKey, setRefreshKey] = React.useState(0)
+  const [currentPlaybookId, setCurrentPlaybookId] = React.useState<string | null>(() => getCurrentPlaybookId())
 
   React.useEffect(() => {
     fetch('http://localhost:8000/api/review')
@@ -653,12 +655,23 @@ function Shell(): JSX.Element {
     setRefreshKey((value) => value + 1)
   }
 
+  function rememberPlaybook(playbookId: string): void {
+    saveCurrentPlaybookId(playbookId)
+    setCurrentPlaybookId(playbookId)
+  }
+
   return (
     <>
-      <Nav pendingCount={pendingCount} onUpload={() => setUploadOpen(true)} />
-      {uploadOpen && <UploadModal onClose={() => setUploadOpen(false)} onDone={markChanged} />}
+      <Nav pendingCount={pendingCount} onUpload={() => setUploadOpen(true)} currentPlaybookId={currentPlaybookId} />
+      {uploadOpen && (
+        <UploadModal
+          onClose={() => setUploadOpen(false)}
+          onDone={markChanged}
+          onPlaybookUploaded={rememberPlaybook}
+        />
+      )}
       <Routes>
-        <Route path="/" element={<UploadPlaybookPage />} />
+        <Route path="/" element={<UploadPlaybookPage onUploaded={rememberPlaybook} />} />
         <Route path="/playbooks/:playbookId/edit" element={<PlaybookEditorPage />} />
         <Route path="/playbooks/:playbookId/analysis" element={<PlaybookAnalysisPage />} />
         <Route path="/playbooks/:playbookId/brain" element={<MiniBrainPage />} />

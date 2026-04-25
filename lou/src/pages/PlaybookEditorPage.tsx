@@ -3,6 +3,7 @@ import { ArrowRight, Check, Pencil, RefreshCw, Wand2, X } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { fetchPlaybook, rewriteCell, rewritePlaybook, updatePlaybookClause } from '../api/client'
 import type { PlaybookApi, PlaybookClause, RewriteCellResponse, RewriteMode } from '../types'
+import { resolvePlaybookId, saveCurrentPlaybookId } from '../utils/currentPlaybook'
 
 type ClauseField =
   | 'clause_name'
@@ -24,7 +25,8 @@ const columns: Array<{ key: ClauseField; label: string }> = [
 ]
 
 export function PlaybookEditorPage(): JSX.Element {
-  const { playbookId = 'current' } = useParams()
+  const params = useParams()
+  const playbookId = resolvePlaybookId(params.playbookId)
   const navigate = useNavigate()
   const [playbook, setPlaybook] = React.useState<PlaybookApi | null>(null)
   const [selectedClauseId, setSelectedClauseId] = React.useState<string | null>(null)
@@ -46,6 +48,7 @@ export function PlaybookEditorPage(): JSX.Element {
       try {
         const data = await fetchPlaybook(playbookId)
         if (!cancelled) {
+          saveCurrentPlaybookId(data.playbook_id)
           setPlaybook(data)
           setSelectedClauseId(data.clauses[0]?.clause_id ?? null)
         }

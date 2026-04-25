@@ -13,12 +13,21 @@ const itemStyle: React.CSSProperties = {
   fontSize: 11,
 }
 
-export function Nav({ pendingCount, onUpload }: { pendingCount: number; onUpload: () => void }): JSX.Element {
+export function Nav({
+  pendingCount,
+  onUpload,
+  currentPlaybookId,
+}: {
+  pendingCount: number
+  onUpload: () => void
+  currentPlaybookId: string | null
+}): JSX.Element {
+  const activePlaybookPath = currentPlaybookId ? `/playbooks/${currentPlaybookId}` : '/playbooks/current'
   const items = [
     { to: '/', label: 'Upload', icon: Upload },
-    { to: '/playbooks/current/edit', label: 'Editor', icon: FileSpreadsheet },
-    { to: '/playbooks/current/analysis', label: 'Logic', icon: Wand2 },
-    { to: '/playbooks/current/brain', label: 'Brain', icon: Network, badge: pendingCount },
+    { to: `${activePlaybookPath}/edit`, label: 'Editor', icon: FileSpreadsheet },
+    { to: `${activePlaybookPath}/analysis`, label: 'Logic', icon: Wand2 },
+    { to: `${activePlaybookPath}/brain`, label: 'Brain', icon: Network, badge: pendingCount },
     { to: '/api-console', label: 'API', icon: Braces },
     { to: '/mega-brain', label: 'Mega', icon: BrainCircuit },
   ]

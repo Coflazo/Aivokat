@@ -309,6 +309,8 @@ class BrainNodeView(BaseModel):
     label: str
     status: ClauseAnalysisStatus
     color: str
+    node_type: str = "clause"
+    text: str = ""
     island_id: Optional[str] = None
     clause: PlaybookClauseView
 

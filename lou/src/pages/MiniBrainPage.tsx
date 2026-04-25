@@ -1,17 +1,20 @@
 import React from 'react'
 import ForceGraph2D, { type LinkObject, type NodeObject } from 'react-force-graph-2d'
-import { GitBranch, RefreshCw, Send } from 'lucide-react'
+import { Check, GitCommit, RefreshCw, Send } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { fetchPlaybookBrain, publishPlaybook } from '../api/client'
 import type { BrainEdgeView, BrainNodeView, PlaybookBrain } from '../types'
+import { resolvePlaybookId, saveCurrentPlaybookId } from '../utils/currentPlaybook'
 
 export function MiniBrainPage(): JSX.Element {
-  const { playbookId = 'current' } = useParams()
+  const params = useParams()
+  const playbookId = resolvePlaybookId(params.playbookId)
   const navigate = useNavigate()
   const [brain, setBrain] = React.useState<PlaybookBrain | null>(null)
   const [selected, setSelected] = React.useState<BrainNodeView | null>(null)
   const [committedBy, setCommittedBy] = React.useState('Peter')
   const [comment, setComment] = React.useState('')
+  const [committed, setCommitted] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [publishing, setPublishing] = React.useState(false)
   const [message, setMessage] = React.useState<string | null>(null)
@@ -22,7 +25,10 @@ export function MiniBrainPage(): JSX.Element {
       setLoading(true)
       try {
         const data = await fetchPlaybookBrain(playbookId)
-        if (!cancelled) setBrain(data)
+        if (!cancelled) {
+          saveCurrentPlaybookId(data.playbook_id)
+          setBrain(data)
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -33,16 +39,29 @@ export function MiniBrainPage(): JSX.Element {
     }
   }, [playbookId])
 
-  async function publish(): Promise<void> {
+  function commitDraft(): void {
     if (!comment.trim()) {
       setMessage('Add a commit comment before publishing.')
+      return
+    }
+    if (!committedBy.trim()) {
+      setMessage('Add a committer name before committing.')
+      return
+    }
+    setCommitted(true)
+    setMessage('Committed locally. Push when you are ready to publish this playbook as an API.')
+  }
+
+  async function pushPublishedApi(): Promise<void> {
+    if (!committed) {
+      setMessage('Commit the reviewed playbook before pushing it to the company brain.')
       return
     }
     setPublishing(true)
     setMessage(null)
     try {
       const response = await publishPlaybook(playbookId, committedBy, comment)
-      setMessage(`Published ${response.mega_brain_entries} clauses. Commit ${response.commit_hash}.`)
+      setMessage(`Pushed ${response.mega_brain_entries} clauses to the company brain. Commit ${response.commit_hash}.`)
       setBrain(await fetchPlaybookBrain(playbookId))
     } catch {
       setMessage('Publish failed. Check committer and comment.')
@@ -105,9 +124,13 @@ export function MiniBrainPage(): JSX.Element {
               Commit comment
               <textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Explain why this playbook is ready to become an API." />
             </label>
-            <button className="primaryAction drawerWide" type="button" disabled={publishing} onClick={() => void publish()}>
-              <Send size={15} />
-              {publishing ? 'Publishing...' : 'Commit and push'}
+            <button className="secondaryAction drawerWide" type="button" disabled={publishing || committed} onClick={commitDraft}>
+              <GitCommit size={15} />
+              {committed ? 'Committed' : 'Commit'}
+            </button>
+            <button className="primaryAction drawerWide" type="button" disabled={publishing || !committed} onClick={() => void pushPublishedApi()}>
+              {committed ? <Send size={15} /> : <Check size={15} />}
+              {publishing ? 'Pushing...' : 'Push to API'}
             </button>
             {message && <p>{message}</p>}
 
@@ -116,8 +139,8 @@ export function MiniBrainPage(): JSX.Element {
               {selected ? (
                 <>
                   <h2>{selected.label}</h2>
-                  <p>{selected.clause.preferred_position}</p>
-                  <small>{selected.status}</small>
+                  <p>{selected.text || selected.clause.preferred_position}</p>
+                  <small>{selected.node_type} / {selected.status}</small>
                 </>
               ) : (
                 <p>Select a clause node to inspect it.</p>
@@ -133,14 +156,16 @@ export function MiniBrainPage(): JSX.Element {
 function drawMiniNode(node: BrainNodeView, ctx: CanvasRenderingContext2D, scale: number): void {
   const x = node.x ?? 0
   const y = node.y ?? 0
-  const radius = node.status === 'issue' ? 7 : node.status === 'warning' ? 6 : 5
+  const radius = node.node_type === 'clause'
+    ? node.status === 'issue' ? 8 : node.status === 'warning' ? 7 : 6
+    : node.node_type === 'red_line' ? 5.5 : 4.5
   ctx.beginPath()
   ctx.arc(x, y, radius, 0, Math.PI * 2)
   ctx.fillStyle = node.color
   ctx.globalAlpha = .9
   ctx.fill()
   ctx.globalAlpha = 1
-  ctx.font = `${10 / scale}px Inter, sans-serif`
+  ctx.font = `${node.node_type === 'clause' ? 10 / scale : 8 / scale}px Inter, sans-serif`
   ctx.fillStyle = '#31291f'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'

@@ -42,8 +42,6 @@ STRICT_WORDS = {
 PERMISSIVE_WORDS = {
     "unlimited",
     "sole discretion",
-    "any",
-    "all",
     "without limitation",
     "perpetual",
     "irrevocable",
@@ -138,26 +136,6 @@ def analyze_clause(clause: PlaybookClause) -> list[IssueCandidate]:
             proposed_fix="Escalate to senior legal when the counterparty rejects the preferred position and asks for a fallback that increases legal or commercial risk.",
         ))
 
-    if fallback_1 and red_line and _appears_strict(fallback_1) and not _appears_strict(red_line):
-        issues.append(IssueCandidate(
-            clause_id=clause.clause_id,
-            field_name="fallback_1",
-            severity=IssueSeverity.WARNING,
-            issue_type=PlaybookIssueType.FALLBACK_TOO_STRICT,
-            explanation="Fallback 1 appears stricter than the red line, which reverses the hierarchy.",
-            proposed_fix="Move the strict boundary into the red line and keep Fallback 1 as a negotiable concession.",
-        ))
-
-    if fallback_2 and red_line and _appears_strict(fallback_2) and not _appears_strict(red_line):
-        issues.append(IssueCandidate(
-            clause_id=clause.clause_id,
-            field_name="fallback_2",
-            severity=IssueSeverity.WARNING,
-            issue_type=PlaybookIssueType.FALLBACK_TOO_STRICT,
-            explanation="Fallback 2 appears stricter than the red line, which makes the final fallback harder than the non-negotiable boundary.",
-            proposed_fix="Clarify Fallback 2 as the last acceptable concession and reserve the strict prohibition for the red line.",
-        ))
-
     if preferred and fallback_1 and _appears_more_permissive(preferred, fallback_1):
         issues.append(IssueCandidate(
             clause_id=clause.clause_id,
@@ -176,7 +154,8 @@ def _clean(value: str | None) -> str:
 
 
 def _contains_any(value: str, words: set[str]) -> bool:
-    return any(word in value for word in words)
+    tokens = set(value.split())
+    return any(word in value if " " in word else word in tokens for word in words)
 
 
 def _appears_strict(value: str) -> bool:

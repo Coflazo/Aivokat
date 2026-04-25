@@ -1,7 +1,16 @@
 import React from 'react'
-import { uploadContract, uploadPlaybook } from '../api/client'
+import { uploadApiPlaybook, uploadContract } from '../api/client'
+import { saveCurrentPlaybookId } from '../utils/currentPlaybook'
 
-export function UploadModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }): JSX.Element {
+export function UploadModal({
+  onClose,
+  onDone,
+  onPlaybookUploaded,
+}: {
+  onClose: () => void
+  onDone: () => void
+  onPlaybookUploaded?: (playbookId: string) => void
+}): JSX.Element {
   const [file, setFile] = React.useState<File | null>(null)
   const [kind, setKind] = React.useState<'playbook' | 'contract'>('contract')
   const [lawyer, setLawyer] = React.useState('Dr. Schmidt')
@@ -13,7 +22,14 @@ export function UploadModal({ onClose, onDone }: { onClose: () => void; onDone: 
     setBusy(true)
     setMessage('')
     try {
-      const result = kind === 'playbook' ? await uploadPlaybook(file, lawyer) : await uploadContract(file, lawyer)
+      const result = kind === 'playbook'
+        ? await uploadApiPlaybook(file, lawyer, file.name.replace(/\.xlsx$/i, ''), 'Uploaded from Lou quick upload')
+        : await uploadContract(file, lawyer)
+      if (kind === 'playbook') {
+        const playbookId = result.playbook.playbook_id
+        saveCurrentPlaybookId(playbookId)
+        onPlaybookUploaded?.(playbookId)
+      }
       setMessage(JSON.stringify(result))
       onDone()
     } catch (error) {

@@ -48,6 +48,16 @@ async def analyze_playbook(playbook_id: str) -> PlaybookApiView:
             .order_by(PlaybookClause.id)
         ).all()
 
+        resolved_keys = {
+            _issue_key(issue.clause_id, issue.field_name, issue.issue_type.value if hasattr(issue.issue_type, "value") else str(issue.issue_type))
+            for issue in session.exec(
+                select(PlaybookIssue).where(
+                    PlaybookIssue.playbook_id == playbook_id,
+                    PlaybookIssue.resolved_at != None,  # noqa: E711 - SQLModel needs this form for IS NOT NULL.
+                )
+            ).all()
+        }
+
         existing_open = session.exec(
             select(PlaybookIssue).where(
                 PlaybookIssue.playbook_id == playbook_id,
@@ -57,34 +67,43 @@ async def analyze_playbook(playbook_id: str) -> PlaybookApiView:
         for issue in existing_open:
             session.delete(issue)
 
+        ranked_candidates = []
         for clause in clauses:
             candidates = analyze_clause(clause)
-            critical_count = 0
-            warning_count = 0
             for candidate in candidates:
-                if candidate.severity.value == "critical":
-                    critical_count += 1
-                elif candidate.severity.value == "warning":
-                    warning_count += 1
-                session.add(PlaybookIssue(
-                    playbook_id=playbook_id,
-                    clause_id=candidate.clause_id,
-                    field_name=candidate.field_name,
-                    severity=candidate.severity,
-                    issue_type=candidate.issue_type,
-                    explanation=candidate.explanation,
-                    proposed_fix=candidate.proposed_fix,
-                ))
+                key = _issue_key(
+                    candidate.clause_id,
+                    candidate.field_name,
+                    candidate.issue_type.value if hasattr(candidate.issue_type, "value") else str(candidate.issue_type),
+                )
+                if key not in resolved_keys:
+                    ranked_candidates.append((clause, candidate))
 
-            if critical_count:
-                clause.analysis_status = ClauseAnalysisStatus.ISSUE
-                clause.analysis_summary = f"{critical_count} critical issue(s), {warning_count} warning(s)."
-            elif warning_count:
-                clause.analysis_status = ClauseAnalysisStatus.WARNING
-                clause.analysis_summary = f"{warning_count} warning(s)."
-            else:
-                clause.analysis_status = ClauseAnalysisStatus.CLEAN
-                clause.analysis_summary = "No hierarchy issues detected."
+            clause.analysis_status = ClauseAnalysisStatus.CLEAN
+            clause.analysis_summary = "No open hierarchy issues."
+            session.add(clause)
+
+        if ranked_candidates:
+            ranked_candidates.sort(key=lambda item: (
+                0 if item[1].severity.value == "critical" else 1,
+                clauses.index(item[0]),
+            ))
+            clause, candidate = ranked_candidates[0]
+            session.add(PlaybookIssue(
+                playbook_id=playbook_id,
+                clause_id=candidate.clause_id,
+                field_name=candidate.field_name,
+                severity=candidate.severity,
+                issue_type=candidate.issue_type,
+                explanation=candidate.explanation,
+                proposed_fix=candidate.proposed_fix,
+            ))
+            clause.analysis_status = (
+                ClauseAnalysisStatus.ISSUE
+                if candidate.severity.value == "critical"
+                else ClauseAnalysisStatus.WARNING
+            )
+            clause.analysis_summary = "One logic suggestion is ready for review."
             session.add(clause)
 
         playbook.updated_at = datetime.utcnow()
@@ -184,3 +203,7 @@ def _refresh_clause_status(session: Session, clause: PlaybookClause) -> None:
     else:
         clause.analysis_status = ClauseAnalysisStatus.CLEAN
         clause.analysis_summary = "No open hierarchy issues."
+
+
+def _issue_key(clause_id: str, field_name: str, issue_type: str) -> tuple[str, str, str]:
+    return (clause_id, field_name, issue_type)

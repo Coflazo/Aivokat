@@ -3,9 +3,11 @@ import { AlertTriangle, ArrowLeft, Check, RefreshCw, SearchCheck, X } from 'luci
 import { useNavigate, useParams } from 'react-router-dom'
 import { acceptIssueFix, analyzePlaybook, fetchPlaybook, rejectIssue } from '../api/client'
 import type { PlaybookApi, PlaybookIssue } from '../types'
+import { resolvePlaybookId, saveCurrentPlaybookId } from '../utils/currentPlaybook'
 
 export function PlaybookAnalysisPage(): JSX.Element {
-  const { playbookId = 'current' } = useParams()
+  const params = useParams()
+  const playbookId = resolvePlaybookId(params.playbookId)
   const navigate = useNavigate()
   const [playbook, setPlaybook] = React.useState<PlaybookApi | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -20,7 +22,10 @@ export function PlaybookAnalysisPage(): JSX.Element {
       setError(null)
       try {
         const data = await fetchPlaybook(playbookId)
-        if (!cancelled) setPlaybook(data)
+        if (!cancelled) {
+          saveCurrentPlaybookId(data.playbook_id)
+          setPlaybook(data)
+        }
       } catch {
         if (!cancelled) setError('Open a playbook by uploading one first.')
       } finally {
@@ -158,7 +163,17 @@ export function PlaybookAnalysisPage(): JSX.Element {
               <h2>{openIssues.length ? `${openIssues.length} issue(s)` : 'No open issues'}</h2>
               <div className="issueList">
                 {openIssues.length === 0 && (
-                  <p className="emptyCopy">Run analysis or return to the editor. The playbook has no open logic issues.</p>
+                  <div className="emptyCopy">
+                    <p>The playbook has no open logic issues.</p>
+                    <button
+                      className="primaryAction"
+                      type="button"
+                      onClick={() => navigate(`/playbooks/${playbookId}/brain`)}
+                    >
+                      Continue to graph
+                      <ArrowLeft size={16} style={{ transform: 'rotate(180deg)' }} />
+                    </button>
+                  </div>
                 )}
                 {openIssues.map((issue) => (
                   <article key={issue.id} className={`issueCard ${issue.severity}`}>
