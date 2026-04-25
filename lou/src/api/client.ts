@@ -123,6 +123,15 @@ export const rewritePlaybook = (
     mode,
   }).then((r) => r.data)
 
+export const analyzePlaybook = (playbookId: string): Promise<PlaybookApi> =>
+  api.post(`/analysis/playbook/${playbookId}`).then((r) => r.data)
+
+export const acceptIssueFix = (issueId: number): Promise<PlaybookApi> =>
+  api.post(`/analysis/issues/${issueId}/accept-fix`).then((r) => r.data)
+
+export const rejectIssue = (issueId: number): Promise<PlaybookApi> =>
+  api.post(`/analysis/issues/${issueId}/reject`).then((r) => r.data)
+
 export const uploadContract = (file: File, lawyerName: string) => {
   const fd = new FormData()
   fd.append('file', file)

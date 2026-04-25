@@ -229,6 +229,7 @@ def _issue_view(issue: PlaybookIssue) -> PlaybookIssueView:
         explanation=issue.explanation,
         proposed_fix=issue.proposed_fix,
         accepted=issue.accepted,
+        rejected=issue.rejected,
         created_at=issue.created_at.isoformat(),
         resolved_at=issue.resolved_at.isoformat() if issue.resolved_at else None,
     )

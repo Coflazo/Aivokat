@@ -181,6 +181,7 @@ class PlaybookIssue(SQLModel, table=True):
     explanation: str
     proposed_fix: Optional[str] = None
     accepted: bool = False
+    rejected: bool = False
     created_at: datetime = SQLField(default_factory=datetime.utcnow)
     resolved_at: Optional[datetime] = None
 
@@ -251,6 +252,7 @@ class PlaybookIssueView(BaseModel):
     explanation: str
     proposed_fix: Optional[str] = None
     accepted: bool = False
+    rejected: bool = False
     created_at: Optional[str] = None
     resolved_at: Optional[str] = None
 

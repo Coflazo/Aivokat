@@ -105,6 +105,7 @@ export interface PlaybookIssue {
   explanation: string
   proposed_fix?: string | null
   accepted: boolean
+  rejected: boolean
   created_at?: string | null
   resolved_at?: string | null
 }
