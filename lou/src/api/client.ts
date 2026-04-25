@@ -216,3 +216,12 @@ export const uploadContract = (file: File, lawyerName: string) => {
   fd.append('lawyer_name', lawyerName)
   return api.post('/playbook/upload-contract', fd).then((r) => r.data)
 }
+
+export const analyzePublicContractFile = (
+  playbookId: string,
+  file: File
+): Promise<AnalyzeContractResponse> => {
+  const fd = new FormData()
+  fd.append('file', file)
+  return api.post(`/public/playbooks/${playbookId}/analyze-contract-file`, fd).then((r) => r.data)
+}

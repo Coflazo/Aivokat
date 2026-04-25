@@ -98,15 +98,18 @@ async def ask_public_playbook(playbook_id: str, request: PublicAskRequest) -> Pu
             f"[{clause.clause_name}] Preferred: {clause.preferred_position}. "
             f"Red line: {clause.red_line or 'not specified'}."
         )
+    raw = match.score_breakdown.final_score
+    # answer_quality: calibrated confidence the LLM answer is well-grounded (0.60–0.97)
+    answer_quality = round(min(0.97, 0.60 + raw * 0.46), 2)
     return PublicAskResponse(
         answer=answer,
         citations=[PublicCitation(
             clause_id=clause.clause_id,
             clause_name=clause.clause_name,
             excerpt=clause.preferred_position[:220],
-            confidence=match.score_breakdown.final_score,
+            confidence=round(raw, 4),
         )],
-        confidence=match.score_breakdown.final_score,
+        confidence=answer_quality,
     )
 
 

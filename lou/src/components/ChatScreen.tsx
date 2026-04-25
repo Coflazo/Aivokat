@@ -1,8 +1,9 @@
 import React from 'react'
+import { Send } from 'lucide-react'
 import { sendChat } from '../api/client'
 import type { ChatMessage, SourceCitation } from '../types'
 
-const prompts = [
+const PROMPTS = [
   'Can we accept unlimited liability?',
   "What's our position on IP ownership?",
   'Has any counterparty tried perpetual confidentiality?',
@@ -14,6 +15,11 @@ export function ChatScreen(): JSX.Element {
   const [sources, setSources] = React.useState<SourceCitation[]>([])
   const [input, setInput] = React.useState('')
   const [busy, setBusy] = React.useState(false)
+  const bottomRef = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, busy])
 
   async function ask(text = input): Promise<void> {
     const trimmed = text.trim()
@@ -27,57 +33,87 @@ export function ChatScreen(): JSX.Element {
       setMessages([...history, { role: 'user', content: trimmed }, { role: 'assistant', content: response.answer }])
       setSources(response.sources)
     } catch (error) {
-      setMessages([...history, { role: 'user', content: trimmed }, { role: 'assistant', content: error instanceof Error ? error.message : 'Lou could not answer.' }])
+      setMessages([...history, { role: 'user', content: trimmed }, {
+        role: 'assistant',
+        content: error instanceof Error ? error.message : 'Lou could not answer.',
+      }])
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <main style={{ minHeight: '100vh', padding: '28px 32px 28px 112px', background: 'var(--cream)', color: 'var(--ink)', display: 'grid', gridTemplateColumns: 'minmax(0,2fr) minmax(280px,1fr)', gap: 20 }}>
-      <section style={{ display: 'grid', gridTemplateRows: 'auto 1fr auto', minHeight: 'calc(100vh - 56px)' }}>
-        <h1 style={{ margin: 0, fontSize: 30 }}>Ask Lou</h1>
-        <div style={{ overflow: 'auto', padding: '22px 0', display: 'grid', alignContent: 'start', gap: 14 }}>
+    <main className="creamPage appPage chatPage">
+      <section className="chatMain">
+        <div className="editorTopbar" style={{ marginBottom: 0 }}>
+          <div>
+            <p className="panelKicker">Playbook RAG</p>
+            <h1>Ask Lou</h1>
+          </div>
+        </div>
+
+        <div className="chatMessages">
           {messages.length === 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-              {prompts.map((prompt) => (
-                <button key={prompt} type="button" onClick={() => void ask(prompt)} style={{ background: 'rgba(0,153,153,.08)', border: '1px solid rgba(0,153,153,.2)', color: 'var(--turquoise)', borderRadius: 999, padding: '9px 12px' }}>
-                  {prompt}
+            <div className="chatPromptGrid">
+              {PROMPTS.map((p) => (
+                <button key={p} type="button" className="chatPromptChip" onClick={() => void ask(p)}>
+                  {p}
                 </button>
               ))}
             </div>
           )}
-          {messages.map((message, index) => (
-            <article key={`${message.role}-${index}`} style={{
-              justifySelf: message.role === 'user' ? 'end' : 'start',
-              maxWidth: '78%',
-              background: message.role === 'user' ? 'var(--cream-deep)' : 'white',
-              borderLeft: message.role === 'assistant' ? '3px solid var(--turquoise)' : '0',
-              borderRadius: 8,
-              padding: '12px 14px',
-              lineHeight: 1.55,
-              boxShadow: '0 8px 24px rgba(47,42,34,.06)',
-              whiteSpace: 'pre-wrap',
-            }}>{message.content}</article>
+          {messages.map((msg, i) => (
+            <div key={i} className={`chatBubble ${msg.role}`}>
+              {msg.role === 'assistant' && (
+                <span className="chatAvatar">L</span>
+              )}
+              <article className="chatBubbleBody">
+                {msg.content}
+              </article>
+            </div>
           ))}
-          {busy && <p style={{ color: 'var(--muted)' }}>Lou is reading the playbook...</p>}
+          {busy && (
+            <div className="chatBubble assistant">
+              <span className="chatAvatar">L</span>
+              <article className="chatBubbleBody chatTyping">
+                <span /><span /><span />
+              </article>
+            </div>
+          )}
+          <div ref={bottomRef} />
         </div>
-        <form onSubmit={(event) => { event.preventDefault(); void ask() }} style={{ display: 'flex', gap: 10, background: 'var(--cream-deep)', padding: 12, borderRadius: 8 }}>
-          <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask a negotiation question" style={{ flex: 1 }} />
-          <button className="reviewButton" type="submit" disabled={busy}>Send</button>
+
+        <form
+          className="chatInput"
+          onSubmit={(e) => { e.preventDefault(); void ask() }}
+        >
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask a negotiation question…"
+            disabled={busy}
+          />
+          <button className="primaryAction chatSend" type="submit" disabled={busy || !input.trim()}>
+            <Send size={15} />
+          </button>
         </form>
       </section>
-      <aside style={{ borderLeft: '1px solid rgba(47,42,34,.12)', paddingLeft: 20 }}>
-        <h2 style={{ marginTop: 0 }}>Sources cited</h2>
-        <div style={{ display: 'grid', gap: 12 }}>
-          {sources.map((source) => (
-            <article key={source.rule_id} style={{ background: 'rgba(255,255,255,.72)', border: '1px solid rgba(0,153,153,.18)', borderRadius: 8, padding: 14 }}>
-              <strong>{source.topic}</strong>
-              <p style={{ color: 'var(--muted)', fontSize: 13 }}>{source.excerpt}</p>
-              <small style={{ color: 'var(--turquoise)' }}>{Math.round(source.confidence * 100)}% match</small>
-            </article>
-          ))}
-        </div>
+
+      <aside className="chatSidebar">
+        <p className="panelKicker">Sources cited</p>
+        {sources.length === 0 ? (
+          <p style={{ fontSize: 12, color: 'var(--muted)' }}>Sources from the playbook appear here after each answer.</p>
+        ) : (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {sources.map((src) => (
+              <article key={src.rule_id} className="chatSourceCard">
+                <strong>{src.topic}</strong>
+                <p>{src.excerpt}</p>
+                <span style={{ color: 'var(--turquoise)', fontSize: 11 }}>{Math.round(src.confidence * 100)}% match</span>
+              </article>
+            ))}
+          </div>
+        )}
       </aside>
     </main>
   )

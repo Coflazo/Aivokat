@@ -30,9 +30,8 @@ function buildGraph(brain: MegaBrain): { nodes: GraphNode[]; links: GraphEdge[] 
   const islandColorMap = new Map<string, string>()
   const islandLabelMap = new Map<string, string>()
   brain.islands.forEach((island, i) => {
-    const key = `${island.playbook_id}-v${island.playbook_version}`
-    islandColorMap.set(key, ISLAND_PALETTE[i % ISLAND_PALETTE.length])
-    islandLabelMap.set(key, `${island.name} v${island.playbook_version}`)
+    islandColorMap.set(island.playbook_id, ISLAND_PALETTE[i % ISLAND_PALETTE.length])
+    islandLabelMap.set(island.playbook_id, `${island.name} v${island.playbook_version}`)
   })
 
   const nodes: GraphNode[] = brain.nodes.map(n => {
