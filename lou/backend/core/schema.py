@@ -2,15 +2,9 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 from typing import Optional
+import json
 from pydantic import BaseModel, Field
 from sqlmodel import SQLModel, Field as SQLField
-
-
-class RuleType(str, Enum):
-    STANDARD = "standard"
-    FALLBACK = "fallback"
-    RED_LINE = "red_line"
-    ESCALATION = "escalation"
 
 
 class ChangeType(str, Enum):
@@ -33,26 +27,29 @@ class Rule(SQLModel, table=True):
     rule_id: str = SQLField(unique=True, index=True)
     topic: str
     category: str
-    rule_type: RuleType
     standard_position: str
     fallback_position: Optional[str] = None
     red_line: Optional[str] = None
     reasoning: str
     suggested_language: Optional[str] = None
     decision_logic: Optional[str] = None
-    sources: str = "[]"  # JSON-serialized list
+    sources: str = "[]"           # JSON list of source doc names
     confidence: float = 1.0
     version: int = 1
-    committed_by: str
+    committed_by: str = "Seed"
     committed_at: datetime = SQLField(default_factory=datetime.utcnow)
     is_active: bool = True
     chroma_id: Optional[str] = None
+
+    def sources_list(self) -> list[str]:
+        return json.loads(self.sources)
 
 
 class Commit(SQLModel, table=True):
     id: Optional[int] = SQLField(default=None, primary_key=True)
     commit_hash: str = SQLField(unique=True, index=True)
     rule_id: str = SQLField(index=True)
+    topic: str = ""               # denormalized for query speed
     change_type: ChangeType
     old_value: Optional[str] = None
     new_value: str
@@ -66,7 +63,8 @@ class Commit(SQLModel, table=True):
 
 class ProposedCommit(SQLModel, table=True):
     id: Optional[int] = SQLField(default=None, primary_key=True)
-    rule_id: str
+    rule_id: str = SQLField(index=True)
+    topic: str = ""
     change_type: ChangeType
     existing_rule_snapshot: Optional[str] = None
     proposed_change: str
@@ -81,7 +79,7 @@ class ProposedCommit(SQLModel, table=True):
     created_at: datetime = SQLField(default_factory=datetime.utcnow)
 
 
-# ── API Request/Response Models ───────────────────────────────────────────────
+# ── API models ────────────────────────────────────────────────────────────────
 
 class ChatMessage(BaseModel):
     role: str
@@ -94,10 +92,16 @@ class ChatRequest(BaseModel):
     lawyer_name: str = "Anonymous"
 
 
+class SourceCitation(BaseModel):
+    rule_id: str
+    topic: str
+    excerpt: str
+    confidence: float
+
+
 class ChatResponse(BaseModel):
     answer: str
-    sources: list[dict]
-    retrieved_rules: list[str]
+    sources: list[SourceCitation]
 
 
 class GraphNode(BaseModel):
@@ -105,7 +109,6 @@ class GraphNode(BaseModel):
     label: str
     topic: str
     category: str
-    rule_type: RuleType
     confidence: float
     version: int
     committed_by: str
@@ -114,9 +117,9 @@ class GraphNode(BaseModel):
     fallback_position: Optional[str] = None
     red_line: Optional[str] = None
     reasoning: str
+    decision_logic: Optional[str] = None
     sources: list[str]
-    x: Optional[float] = None
-    y: Optional[float] = None
+    lifecycle: str  # "active" | "staged" | "approved"
 
 
 class GraphEdge(BaseModel):
@@ -131,7 +134,7 @@ class GraphData(BaseModel):
 
 
 class ApprovalRequest(BaseModel):
-    proposed_commit_id: int
-    decision: ApprovalStatus
+    decision: ApprovalStatus       # only APPROVED or REJECTED accepted
     lawyer_name: str
     lawyer_note: Optional[str] = None
+    proposed_text: Optional[str] = None   # lawyer may edit text before approving

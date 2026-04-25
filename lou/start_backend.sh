@@ -1,5 +1,4 @@
 #!/bin/bash
-# Run from lou/ root directory
 set -e
 cd "$(dirname "$0")/backend"
 export PYTHONPATH="$(dirname "$0")"
