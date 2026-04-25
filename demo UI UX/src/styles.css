@@ -87,20 +87,21 @@ body {
 }
 
 .brand img {
-  width: 94px;
+  width: 112px;
   height: auto;
   display: block;
-  opacity: .92;
+  opacity: .96;
+  mix-blend-mode: multiply;
 }
 
 .brand span {
   display: inline-grid;
   place-items: center;
-  width: 36px;
+  width: 76px;
   height: 24px;
   border-left: 1px solid rgba(47, 42, 34, .18);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .brainShell {
@@ -477,7 +478,7 @@ body {
   }
 
   .brand img {
-    width: 82px;
+    width: 96px;
   }
 
   .legend {

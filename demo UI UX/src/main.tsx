@@ -492,8 +492,8 @@ function App(): JSX.Element {
   return (
     <main className="creamPage">
       <div className="brand">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Siemens-logo.svg/1280px-Siemens-logo.svg.png" alt="Siemens" />
-        <span>Lou</span>
+        <img src="/lou-wordmark.png" alt="Lou" />
+        <span>legal brain</span>
       </div>
       <div className="brainShell" aria-label="Lou playbook brain">
         <ForceGraph2D<BrainNode, BrainLink>
