@@ -421,6 +421,8 @@ class MatchClauseResponse(BaseModel):
     classification: str
     explanation: str
     score_breakdown: ScoreBreakdown
+    recommended_action: str = "Review the matched position and decide whether to accept, negotiate, or escalate."
+    needs_lawyer_review: bool = False
 
 
 class AnalyzeContractTextRequest(BaseModel):

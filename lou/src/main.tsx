@@ -8,7 +8,10 @@ import ForceGraph2D, {
 } from 'react-force-graph-2d'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { fetchGraph } from './api/client'
+import { ChatScreen } from './components/ChatScreen'
+import { CommitHistoryScreen } from './components/CommitHistoryScreen'
 import { Nav } from './components/Nav'
+import { ReviewQueueScreen } from './components/ReviewQueueScreen'
 import { UploadModal } from './components/UploadModal'
 import {
   ApiConsolePage,
@@ -678,6 +681,9 @@ function Shell(): JSX.Element {
         <Route path="/legacy-brain" element={<App key={refreshKey} />} />
         <Route path="/api-console" element={<ApiConsolePage />} />
         <Route path="/mega-brain" element={<MegaBrainPage />} />
+        <Route path="/chat" element={<ChatScreen />} />
+        <Route path="/history" element={<CommitHistoryScreen />} />
+        <Route path="/review-queue" element={<ReviewQueueScreen onReviewed={markChanged} />} />
       </Routes>
     </>
   )

@@ -67,7 +67,10 @@ async def analyze_playbook(playbook_id: str) -> PlaybookApiView:
         for issue in existing_open:
             session.delete(issue)
 
-        ranked_candidates = []
+        # First pass: collect all candidates, keyed by clause_id.
+        clause_worst: dict[str, str] = {}
+        clause_count: dict[str, int] = {}
+        all_new_issues: list[PlaybookIssue] = []
         for clause in clauses:
             candidates = analyze_clause(clause)
             for candidate in candidates:
@@ -76,34 +79,38 @@ async def analyze_playbook(playbook_id: str) -> PlaybookApiView:
                     candidate.field_name,
                     candidate.issue_type.value if hasattr(candidate.issue_type, "value") else str(candidate.issue_type),
                 )
-                if key not in resolved_keys:
-                    ranked_candidates.append((clause, candidate))
+                if key in resolved_keys:
+                    continue
+                sev = candidate.severity.value if hasattr(candidate.severity, "value") else str(candidate.severity)
+                prev = clause_worst.get(candidate.clause_id, "")
+                clause_worst[candidate.clause_id] = "critical" if (sev == "critical" or prev == "critical") else "warning"
+                clause_count[candidate.clause_id] = clause_count.get(candidate.clause_id, 0) + 1
+                all_new_issues.append(PlaybookIssue(
+                    playbook_id=playbook_id,
+                    clause_id=candidate.clause_id,
+                    field_name=candidate.field_name,
+                    severity=candidate.severity,
+                    issue_type=candidate.issue_type,
+                    explanation=candidate.explanation,
+                    proposed_fix=candidate.proposed_fix,
+                ))
 
-            clause.analysis_status = ClauseAnalysisStatus.CLEAN
-            clause.analysis_summary = "No open hierarchy issues."
-            session.add(clause)
+        for issue in all_new_issues:
+            session.add(issue)
 
-        if ranked_candidates:
-            ranked_candidates.sort(key=lambda item: (
-                0 if item[1].severity.value == "critical" else 1,
-                clauses.index(item[0]),
-            ))
-            clause, candidate = ranked_candidates[0]
-            session.add(PlaybookIssue(
-                playbook_id=playbook_id,
-                clause_id=candidate.clause_id,
-                field_name=candidate.field_name,
-                severity=candidate.severity,
-                issue_type=candidate.issue_type,
-                explanation=candidate.explanation,
-                proposed_fix=candidate.proposed_fix,
-            ))
-            clause.analysis_status = (
-                ClauseAnalysisStatus.ISSUE
-                if candidate.severity.value == "critical"
-                else ClauseAnalysisStatus.WARNING
-            )
-            clause.analysis_summary = "One logic suggestion is ready for review."
+        # Second pass: update every clause status based on collected issues.
+        clause_by_id = {c.clause_id: c for c in clauses}
+        for cid, clause in clause_by_id.items():
+            if cid in clause_worst:
+                worst = clause_worst[cid]
+                count = clause_count[cid]
+                clause.analysis_status = (
+                    ClauseAnalysisStatus.ISSUE if worst == "critical" else ClauseAnalysisStatus.WARNING
+                )
+                clause.analysis_summary = f"{count} issue(s) ready for review."
+            else:
+                clause.analysis_status = ClauseAnalysisStatus.CLEAN
+                clause.analysis_summary = "No open hierarchy issues."
             session.add(clause)
 
         playbook.updated_at = datetime.utcnow()

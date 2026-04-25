@@ -339,7 +339,7 @@ export function PlaybookEditorPage(): JSX.Element {
             <button className="closeButton" type="button" onClick={() => setBulkRewrite(null)}>Close</button>
           </div>
           <div className="bulkRewriteList">
-            {bulkRewrite.slice(0, 12).map((proposal, index) => (
+            {bulkRewrite.map((proposal, index) => (
               <article key={`${proposal.clause_id}-${proposal.field_name}-${index}`}>
                 <strong>{proposal.clause_id} / {proposal.field_name}</strong>
                 <p>{proposal.rewritten}</p>

@@ -278,6 +278,8 @@ export interface MatchClauseResponse {
   classification: string
   explanation: string
   score_breakdown: ScoreBreakdown
+  recommended_action: string
+  needs_lawyer_review: boolean
 }
 
 export interface SegmentedClause {

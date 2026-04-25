@@ -1,6 +1,6 @@
 import json
 from backend.core.schema import ChatMessage, ChatResponse
-from backend.services.vector_store import search_rules
+from backend.services.vector_store import search_rules, search_mega_brain
 from backend.services.llm import complete
 
 RAG_SYSTEM = """You are Lou, an intelligent legal playbook assistant for Siemens contract negotiations.
@@ -34,21 +34,43 @@ def _format_rules_context(rules: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
+def _format_mega_brain_context(results: list[dict]) -> str:
+    parts = []
+    for r in results:
+        meta = r.get("metadata", {})
+        doc = r.get("document", "")
+        part = (
+            f"--- Playbook Clause: {meta.get('topic', 'Unknown')} "
+            f"(Playbook: {meta.get('playbook_id', '')}, Owner: {meta.get('owner', '')}) ---\n"
+            f"{doc}"
+        )
+        parts.append(part)
+    return "\n\n".join(parts)
+
+
 async def answer_question(
     question: str,
     history: list[ChatMessage],
     n_rules: int = 5,
 ) -> ChatResponse:
-    retrieved = search_rules(question, n_results=n_rules)
+    # Search both legacy rules and published playbook clauses (mega brain).
+    legacy_rules = search_rules(question, n_results=n_rules)
+    mega_results = search_mega_brain(question, n_results=n_rules)
 
-    if not retrieved:
+    if not legacy_rules and not mega_results:
         return ChatResponse(
             answer="I don't have a specific rule for that in the current playbook. Please upload a playbook first.",
             sources=[],
             retrieved_rules=[],
         )
 
-    rules_context = _format_rules_context(retrieved)
+    context_parts: list[str] = []
+    if legacy_rules:
+        context_parts.append(_format_rules_context(legacy_rules))
+    if mega_results:
+        context_parts.append(_format_mega_brain_context(mega_results))
+
+    rules_context = "\n\n".join(context_parts)
     system = RAG_SYSTEM.format(rules_context=rules_context)
 
     history_msgs = ""
@@ -61,18 +83,30 @@ async def answer_question(
 
     answer = await complete(system_prompt=system, user_message=user_msg, max_tokens=1500)
 
-    sources = [
-        {
+    # Build sources from both search results.
+    sources: list[dict] = []
+    retrieved_rule_ids: list[str] = []
+    for r in legacy_rules:
+        sources.append({
             "rule_id": r["rule_id"],
             "topic": r["topic"],
             "excerpt": r["standard_position"][:150],
             "confidence": r.get("confidence", 1.0),
-        }
-        for r in retrieved
-    ]
+        })
+        retrieved_rule_ids.append(r["rule_id"])
+    for r in mega_results:
+        meta = r.get("metadata", {})
+        vid = r.get("vector_id", meta.get("clause_id", ""))
+        sources.append({
+            "rule_id": vid,
+            "topic": meta.get("topic", ""),
+            "excerpt": r.get("document", "")[:150],
+            "confidence": r.get("similarity", 1.0),
+        })
+        retrieved_rule_ids.append(vid)
 
     return ChatResponse(
         answer=answer,
         sources=sources,
-        retrieved_rules=[r["rule_id"] for r in retrieved],
+        retrieved_rules=retrieved_rule_ids,
     )

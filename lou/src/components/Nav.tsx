@@ -1,4 +1,4 @@
-import { BrainCircuit, Braces, Download, FileSpreadsheet, Network, SearchCode, Upload, Wand2 } from 'lucide-react'
+import { BrainCircuit, Braces, ClipboardList, Download, FileSpreadsheet, History, MessageCircle, Network, SearchCode, Upload, Wand2 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { exportExcel } from '../api/client'
 
@@ -27,9 +27,12 @@ export function Nav({
     { to: '/', label: 'Upload', icon: Upload },
     { to: `${activePlaybookPath}/edit`, label: 'Editor', icon: FileSpreadsheet },
     { to: `${activePlaybookPath}/analysis`, label: 'Logic', icon: Wand2 },
-    { to: `${activePlaybookPath}/brain`, label: 'Brain', icon: Network, badge: pendingCount },
+    { to: `${activePlaybookPath}/brain`, label: 'Brain', icon: Network },
     { to: '/api-console', label: 'API', icon: Braces },
     { to: '/mega-brain', label: 'Mega', icon: BrainCircuit },
+    { to: '/chat', label: 'Chat', icon: MessageCircle },
+    { to: '/history', label: 'History', icon: History },
+    { to: '/review-queue', label: 'Review', icon: ClipboardList, badge: pendingCount },
   ]
 
   return (

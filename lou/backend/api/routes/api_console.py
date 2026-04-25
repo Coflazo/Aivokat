@@ -31,6 +31,7 @@ from backend.core.schema import (
 )
 from backend.api.routes.playbooks import _load_playbook_view
 from backend.services.document_segmentation import segment_file, segment_text
+from backend.services.llm import complete, complete_json
 from backend.services.playbook_matching import match_clause_to_playbook
 
 router = APIRouter(prefix="/api/public", tags=["public-playbook-api"])
@@ -70,7 +71,7 @@ async def get_public_schema(playbook_id: str) -> dict:
 @router.post("/playbooks/{playbook_id}/ask", response_model=PublicAskResponse)
 async def ask_public_playbook(playbook_id: str, request: PublicAskRequest) -> PublicAskResponse:
     playbook = _published_playbook(playbook_id)
-    match = match_clause_to_playbook(request.question, None, playbook.clauses)
+    match = await match_clause_to_playbook(request.question, None, playbook.clauses)
     if not match:
         return PublicAskResponse(
             answer="I could not find a published playbook clause that answers this question.",
@@ -79,13 +80,24 @@ async def ask_public_playbook(playbook_id: str, request: PublicAskRequest) -> Pu
         )
 
     clause = match.matched_clause
-    answer = (
-        f"[Clause: {clause.clause_name}] The preferred position is: {clause.preferred_position} "
-        f"Fallback 1: {clause.fallback_1 or 'not specified'}. "
-        f"Fallback 2: {clause.fallback_2 or 'not specified'}. "
-        f"Red line: {clause.red_line or 'not specified'}. "
-        f"Escalation: {clause.escalation_trigger or 'not specified'}."
+    system_prompt = (
+        "You are a legal playbook assistant. Answer the user's question based strictly on "
+        "the following playbook clause. Be concise and precise.\n\n"
+        f"Clause: {clause.clause_name}\n"
+        f"Why it matters: {clause.why_it_matters}\n"
+        f"Preferred position: {clause.preferred_position}\n"
+        f"Fallback 1: {clause.fallback_1 or 'not specified'}\n"
+        f"Fallback 2: {clause.fallback_2 or 'not specified'}\n"
+        f"Red line: {clause.red_line or 'not specified'}\n"
+        f"Escalation trigger: {clause.escalation_trigger or 'not specified'}"
     )
+    try:
+        answer = await complete(system_prompt=system_prompt, user_message=request.question, max_tokens=600)
+    except Exception:
+        answer = (
+            f"[{clause.clause_name}] Preferred: {clause.preferred_position}. "
+            f"Red line: {clause.red_line or 'not specified'}."
+        )
     return PublicAskResponse(
         answer=answer,
         citations=[PublicCitation(
@@ -101,7 +113,7 @@ async def ask_public_playbook(playbook_id: str, request: PublicAskRequest) -> Pu
 @router.post("/playbooks/{playbook_id}/match-clause", response_model=MatchClauseResponse)
 async def match_public_clause(playbook_id: str, request: MatchClauseRequest) -> MatchClauseResponse:
     playbook = _published_playbook(playbook_id)
-    match = match_clause_to_playbook(request.clause_text, request.heading, playbook.clauses)
+    match = await match_clause_to_playbook(request.clause_text, request.heading, playbook.clauses)
     if not match:
         raise HTTPException(status_code=404, detail="No playbook clauses are available for matching.")
     return match
@@ -110,7 +122,7 @@ async def match_public_clause(playbook_id: str, request: MatchClauseRequest) -> 
 @router.post("/playbooks/{playbook_id}/analyze-contract", response_model=AnalyzeContractResponse)
 async def analyze_contract_text(playbook_id: str, request: AnalyzeContractTextRequest) -> AnalyzeContractResponse:
     segmented = segment_text(request.text, request.source_filename)
-    return _analyze_segmented_contract(playbook_id, segmented)
+    return await _analyze_segmented_contract(playbook_id, segmented)
 
 
 @router.post("/playbooks/{playbook_id}/analyze-contract-file", response_model=AnalyzeContractResponse)
@@ -130,7 +142,7 @@ async def analyze_contract_file(
         segmented = segment_file(destination, source_filename or safe_name)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    return _analyze_segmented_contract(playbook_id, segmented)
+    return await _analyze_segmented_contract(playbook_id, segmented)
 
 
 @router.post("/playbooks/{playbook_id}/suggest-rewrite", response_model=SuggestRewriteResponse)
@@ -139,14 +151,32 @@ async def suggest_public_rewrite(playbook_id: str, request: SuggestRewriteReques
     clause = next((item for item in playbook.clauses if item.clause_id == request.matched_clause_id), None)
     if not clause:
         raise HTTPException(status_code=404, detail="Matched playbook clause not found.")
+
+    system_prompt = (
+        "You are a legal drafting assistant. Rewrite the provided contract clause to align with "
+        "the playbook's preferred position while preserving the clause's business intent.\n\n"
+        f"Playbook clause: {clause.clause_name}\n"
+        f"Preferred position: {clause.preferred_position}\n"
+        f"Red line (must not cross): {clause.red_line or 'not specified'}\n\n"
+        "Return a JSON object with keys: rewrite (string), explanation (string)."
+    )
+    try:
+        result = await complete_json(
+            system_prompt=system_prompt,
+            user_message=f"Rewrite this clause:\n\n{request.contract_clause}",
+            max_tokens=800,
+        )
+        suggested_rewrite = result.get("rewrite", clause.preferred_position)
+        explanation = result.get("explanation", f"Aligned to preferred position from '{clause.clause_name}'.")
+    except Exception:
+        suggested_rewrite = clause.preferred_position
+        explanation = f"Using preferred position from '{clause.clause_name}' as fallback. A lawyer should review before sending externally."
+
     return SuggestRewriteResponse(
         matched_clause_id=clause.clause_id,
         original=request.contract_clause,
-        suggested_rewrite=clause.preferred_position,
-        explanation=(
-            f"The safest compliant rewrite uses the published preferred position from "
-            f"'{clause.clause_name}'. A lawyer should review before sending it externally."
-        ),
+        suggested_rewrite=suggested_rewrite,
+        explanation=explanation,
     )
 
 
@@ -156,7 +186,7 @@ async def coverage_gaps(playbook_id: str, request: CoverageGapsRequest) -> Cover
     segmented = segment_text(request.text, request.source_filename)
     gaps: list[CoverageGap] = []
     for clause in segmented.clauses:
-        match = match_clause_to_playbook(clause.text, clause.heading, playbook.clauses)
+        match = await match_clause_to_playbook(clause.text, clause.heading, playbook.clauses, use_llm=False)
         if not match or match.score_breakdown.final_score < UNMAPPED_THRESHOLD:
             gaps.append(CoverageGap(
                 clause_id=clause.clause_id,
@@ -174,14 +204,14 @@ def _published_playbook(playbook_id: str):
     return view
 
 
-def _analyze_segmented_contract(playbook_id: str, segmented) -> AnalyzeContractResponse:
+async def _analyze_segmented_contract(playbook_id: str, segmented) -> AnalyzeContractResponse:
     playbook = _published_playbook(playbook_id)
     analyzed: list[AnalyzedContractClause] = []
     heatmap = ContractRiskHeatmap()
     explanations: list[str] = []
 
     for segmented_clause in segmented.clauses:
-        match = match_clause_to_playbook(segmented_clause.text, segmented_clause.heading, playbook.clauses)
+        match = await match_clause_to_playbook(segmented_clause.text, segmented_clause.heading, playbook.clauses)
         if not match or match.score_breakdown.final_score < UNMAPPED_THRESHOLD:
             heatmap.unmapped_count += 1
             analyzed.append(AnalyzedContractClause(segmented_clause=segmented_clause, match=None))
