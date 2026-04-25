@@ -289,6 +289,12 @@ class PlaybookClausePatch(BaseModel):
     edited_by: str = "Anonymous"
 
 
+class PlaybookClausePatchResponse(BaseModel):
+    playbook: PlaybookApiView
+    updated_clause: PlaybookClauseView
+    draft_diff: dict
+
+
 class SegmentedClause(BaseModel):
     clause_id: str
     heading: Optional[str] = None

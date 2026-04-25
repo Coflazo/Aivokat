@@ -7,6 +7,7 @@ Initial Commit
 **/.DS_Store
 demo UI UX/
 lou/.env
+lou/data/
 lou/backend/data/
 lou/backend/data/chroma/
 lou/backend/data/uploads/

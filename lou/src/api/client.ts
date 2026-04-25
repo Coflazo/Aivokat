@@ -1,5 +1,14 @@
 import axios from 'axios'
-import type { ChatMessage, ChatResponse, Commit, GraphData, ProposedCommit } from '../types'
+import type {
+  ChatMessage,
+  ChatResponse,
+  Commit,
+  GraphData,
+  PlaybookApi,
+  PlaybookPatchResponse,
+  PlaybookUploadResponse,
+  ProposedCommit
+} from '../types'
 
 const api = axios.create({ baseURL: 'http://localhost:8000/api' })
 
@@ -44,6 +53,36 @@ export const uploadPlaybook = (file: File, lawyerName: string) => {
   fd.append('lawyer_name', lawyerName)
   return api.post('/playbook/upload', fd).then((r) => r.data)
 }
+
+export const uploadApiPlaybook = (
+  file: File,
+  owner: string,
+  name: string,
+  description = ''
+): Promise<PlaybookUploadResponse> => {
+  const fd = new FormData()
+  fd.append('file', file)
+  fd.append('owner', owner)
+  fd.append('name', name)
+  fd.append('description', description)
+  return api.post('/playbooks/upload', fd).then((r) => r.data)
+}
+
+export const fetchPlaybook = (playbookId: string): Promise<PlaybookApi> =>
+  api.get(`/playbooks/${playbookId}`).then((r) => r.data)
+
+export const updatePlaybookClause = (
+  playbookId: string,
+  clauseId: string,
+  fieldName: string,
+  value: string,
+  editedBy: string
+): Promise<PlaybookPatchResponse> =>
+  api.patch(`/playbooks/${playbookId}/clauses/${clauseId}`, {
+    field_name: fieldName,
+    value,
+    edited_by: editedBy,
+  }).then((r) => r.data)
 
 export const uploadContract = (file: File, lawyerName: string) => {
   const fd = new FormData()
