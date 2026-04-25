@@ -11,6 +11,7 @@ import './styles.css'
 
 type PositionKind = 'preferred' | 'fallback' | 'negative'
 type BrainKind = PositionKind | 'topic'
+type HumanAction = 'approve' | 'add_fallback' | 'move_earlier' | 'move_later' | 'delete'
 
 interface PlaybookRow {
   id: string
@@ -31,6 +32,7 @@ interface BrainNode {
   detail: string
   datasets: string[]
   commits: string[]
+  lifecycle?: 'active' | 'staged' | 'approved'
   x?: number
   y?: number
   val?: number
@@ -53,6 +55,20 @@ interface BrainBoundaryForce {
 const BRAIN_RX = 330
 const BRAIN_RY = 218
 const playbookRows: PlaybookRow[] = sourcePlaybookRows.map((row: SourcePlaybookRow) => ({ ...row }))
+const savedDocuments: string[] = [
+  'Sample NDA Playbook.csv.xlsx',
+  'Sample NDA Playbook.docx',
+  'Sample Standard NDA.docx',
+  'Negotiated NDA - Supplier A.docx',
+  'Manual legal note'
+]
+
+const lawyers: string[] = [
+  'Maria Keller',
+  'Jonas Weber',
+  'Anika Schmidt',
+  'Felix Hartmann'
+]
 
 const kindColors: Record<BrainKind, string> = {
   topic: '#2f2a22',
@@ -132,8 +148,8 @@ function buildBrainData(): GraphData<BrainNode, BrainLink> {
       detail: row.why,
       datasets: [row.sourceFile],
       commits: [
-        `Initial extraction: ${row.clause}`,
-        'Mapped playbook row into preferred, fallback, and risk positions'
+        `Maria Keller: approved initial extraction for ${row.clause}`,
+        'Jonas Weber: mapped playbook row into preferred, fallback, and risk positions'
       ],
       x: topicX,
       y: topicY,
@@ -150,8 +166,8 @@ function buildBrainData(): GraphData<BrainNode, BrainLink> {
       detail: row.preferred,
       datasets: [row.sourceFile],
       commits: [
-        'Preferred position committed from source playbook',
-        'No lawyer override recorded'
+        'Anika Schmidt: preferred position committed from source playbook',
+        'Maria Keller: no lawyer override recorded'
       ],
       x: preferredPoint.x,
       y: preferredPoint.y,
@@ -175,8 +191,8 @@ function buildBrainData(): GraphData<BrainNode, BrainLink> {
         detail: fallback,
         datasets: [row.sourceFile],
         commits: [
-          `Fallback ${fallbackIndex + 1} committed from source playbook`,
-          'Available only when negotiation pressure justifies deviation'
+          `Jonas Weber: fallback ${fallbackIndex + 1} committed from source playbook`,
+          'Anika Schmidt: marked available only when negotiation pressure justifies deviation'
         ],
         x: fallbackPoint.x,
         y: fallbackPoint.y,
@@ -199,8 +215,8 @@ function buildBrainData(): GraphData<BrainNode, BrainLink> {
       detail: `${row.redLine}. Escalate: ${row.escalation}.`,
       datasets: [row.sourceFile],
       commits: [
-        'Risk boundary committed from red-line and escalation columns',
-        'Requires lawyer approval before changing'
+        'Felix Hartmann: risk boundary committed from red-line and escalation columns',
+        'Maria Keller: locked behind lawyer approval before changing'
       ],
       x: negativePoint.x,
       y: negativePoint.y,
@@ -254,11 +270,131 @@ function useWindowSize(): { width: number; height: number } {
   return size
 }
 
+function baseRuleId(nodeId: string): string {
+  if (nodeId.startsWith('topic_')) return nodeId.slice('topic_'.length)
+  return nodeId
+    .replace(/_preferred$/, '')
+    .replace(/_negative$/, '')
+    .replace(/_fallback_\d+$/, '')
+}
+
+function sourceId(linkEnd: string | number | NodeObject<BrainNode> | undefined): string {
+  if (typeof linkEnd === 'object' && linkEnd !== null) return String(linkEnd.id)
+  return String(linkEnd)
+}
+
+function commitLine(lawyer: string, action: HumanAction, note: string, documentTitle: string): string {
+  const actionLabel: Record<HumanAction, string> = {
+    approve: 'approved node after human review',
+    add_fallback: 'added a manual fallback node',
+    move_earlier: 'moved fallback earlier in sequence',
+    move_later: 'moved fallback later in sequence',
+    delete: 'removed node from active graph'
+  }
+  return `${lawyer}: ${actionLabel[action]}. Note: ${note || 'No note provided'}. Document: ${documentTitle}.`
+}
+
 function App(): JSX.Element {
   const graphRef = React.useRef<ForceGraphMethods<BrainNode, BrainLink>>()
   const size = useWindowSize()
-  const graphData = React.useMemo<GraphData<BrainNode, BrainLink>>(() => buildBrainData(), [])
+  const [graphData, setGraphData] = React.useState<GraphData<BrainNode, BrainLink>>(() => buildBrainData())
   const [selectedNode, setSelectedNode] = React.useState<BrainNode | null>(null)
+  const [humanLoopOpen, setHumanLoopOpen] = React.useState<boolean>(false)
+
+  function updateNode(nodeId: string, updater: (node: BrainNode) => BrainNode): void {
+    setGraphData((current: GraphData<BrainNode, BrainLink>) => ({
+      ...current,
+      nodes: current.nodes.map((node: NodeObject<BrainNode>) => {
+        const brainNode = node as SimNode
+        return brainNode.id === nodeId ? updater(brainNode) : brainNode
+      })
+    }))
+    setSelectedNode((current: BrainNode | null) => current?.id === nodeId ? updater(current) : current)
+  }
+
+  function addManualFallback(node: BrainNode, note: string, documentTitle: string, lawyer: string): void {
+    const baseId = baseRuleId(node.id)
+    const topicId = `topic_${baseId}`
+    const existingFallbacks = graphData.nodes
+      .map((candidate: NodeObject<BrainNode>) => candidate as SimNode)
+      .filter((candidate: SimNode) => candidate.id.startsWith(`${baseId}_fallback_`))
+    const nextIndex = existingFallbacks.length + 1
+    const topicNode = graphData.nodes
+      .map((candidate: NodeObject<BrainNode>) => candidate as SimNode)
+      .find((candidate: SimNode) => candidate.id === topicId)
+    const anchorX = topicNode?.x ?? node.x ?? 0
+    const anchorY = topicNode?.y ?? node.y ?? 0
+    const point = keepInsideBrain(anchorX + 52, anchorY + nextIndex * 15)
+    const newNode: BrainNode = {
+      id: `${baseId}_fallback_${nextIndex}`,
+      label: `Fallback ${nextIndex}`,
+      kind: 'fallback',
+      clause: node.clause,
+      detail: note || `Manual fallback added from ${documentTitle}`,
+      datasets: [documentTitle],
+      commits: [commitLine(lawyer, 'add_fallback', note, documentTitle)],
+      lifecycle: 'staged',
+      x: point.x,
+      y: point.y,
+      val: 2.8
+    }
+
+    setGraphData((current: GraphData<BrainNode, BrainLink>) => ({
+      nodes: [...current.nodes, newNode],
+      links: [
+        ...current.links,
+        { source: topicId, target: newNode.id, strength: 0.65, kind: 'fallback' },
+        ...(existingFallbacks.length > 0
+          ? [{ source: existingFallbacks[existingFallbacks.length - 1].id, target: newNode.id, strength: 0.24, kind: 'fallback' as PositionKind }]
+          : [])
+      ]
+    }))
+    setSelectedNode(newNode)
+    graphRef.current?.d3ReheatSimulation()
+  }
+
+  function deleteNode(node: BrainNode, note: string, documentTitle: string, lawyer: string): void {
+    if (node.kind === 'topic') {
+      updateNode(node.id, (current: BrainNode) => ({
+        ...current,
+        lifecycle: 'staged',
+        commits: [commitLine(lawyer, 'delete', note || 'Topic deletion requires dependent-node review', documentTitle), ...current.commits]
+      }))
+      return
+    }
+
+    setGraphData((current: GraphData<BrainNode, BrainLink>) => ({
+      nodes: current.nodes.filter((candidate: NodeObject<BrainNode>) => String(candidate.id) !== node.id),
+      links: current.links.filter((link: LinkObject<BrainNode, BrainLink>) => sourceId(link.source) !== node.id && sourceId(link.target) !== node.id)
+    }))
+    setSelectedNode(null)
+    graphRef.current?.d3ReheatSimulation()
+  }
+
+  function approveNode(node: BrainNode, note: string, documentTitle: string, lawyer: string): void {
+    updateNode(node.id, (current: BrainNode) => ({
+      ...current,
+      lifecycle: 'approved',
+      datasets: Array.from(new Set([...current.datasets, documentTitle])),
+      commits: [commitLine(lawyer, 'approve', note, documentTitle), ...current.commits]
+    }))
+  }
+
+  function sequenceFallback(node: BrainNode, action: 'move_earlier' | 'move_later', note: string, documentTitle: string, lawyer: string): void {
+    if (node.kind !== 'fallback') return
+
+    const match = node.id.match(/^(.*_fallback_)(\d+)$/)
+    if (!match) return
+
+    const currentIndex = Number(match[2])
+    const nextIndex = action === 'move_earlier' ? Math.max(1, currentIndex - 1) : currentIndex + 1
+    updateNode(node.id, (current: BrainNode) => ({
+      ...current,
+      label: `Fallback ${nextIndex}`,
+      lifecycle: 'staged',
+      commits: [commitLine(lawyer, action, note, documentTitle), ...current.commits]
+    }))
+  }
 
   React.useEffect(() => {
     const graph = graphRef.current
@@ -288,6 +424,8 @@ function App(): JSX.Element {
     const radius = typedNode.kind === 'topic' ? 5.4 : typedNode.kind === 'preferred' ? 3.7 : 3.1
     const labelFontSize = typedNode.kind === 'topic' ? 10 / globalScale : 8 / globalScale
     const shouldLabel = typedNode.kind === 'topic' || globalScale > 1.35
+    const isSelected = selectedNode?.id === typedNode.id
+    const pulse = 1 + Math.sin(Date.now() / 320) * 0.18
 
     ctx.beginPath()
     ctx.arc(x, y, radius, 0, Math.PI * 2)
@@ -302,6 +440,28 @@ function App(): JSX.Element {
     ctx.lineWidth = 1.2 / globalScale
     ctx.stroke()
     ctx.globalAlpha = 1
+
+    if (isSelected) {
+      ctx.beginPath()
+      ctx.arc(x, y, radius + 8, 0, Math.PI * 2)
+      ctx.strokeStyle = '#2f2a22'
+      ctx.globalAlpha = 0.42
+      ctx.lineWidth = 1.3 / globalScale
+      ctx.stroke()
+      ctx.globalAlpha = 1
+    }
+
+    if (typedNode.lifecycle === 'staged' || typedNode.lifecycle === 'approved') {
+      ctx.beginPath()
+      ctx.arc(x, y, radius + (typedNode.lifecycle === 'staged' ? 11 * pulse : 9), 0, Math.PI * 2)
+      ctx.strokeStyle = typedNode.lifecycle === 'staged' ? '#ec6602' : '#009999'
+      ctx.globalAlpha = typedNode.lifecycle === 'staged' ? 0.34 : 0.28
+      ctx.setLineDash(typedNode.lifecycle === 'staged' ? [3 / globalScale, 4 / globalScale] : [])
+      ctx.lineWidth = 1.4 / globalScale
+      ctx.stroke()
+      ctx.setLineDash([])
+      ctx.globalAlpha = 1
+    }
 
     if (!shouldLabel) return
 
@@ -344,12 +504,7 @@ function App(): JSX.Element {
           backgroundColor="rgba(0,0,0,0)"
           nodeId="id"
           nodeVal={(node: NodeObject<BrainNode>) => node.val ?? 2}
-          nodeLabel={(node: NodeObject<BrainNode>) => {
-            const typedNode = node as NodeObject<BrainNode> & BrainNode
-            const datasets = typedNode.datasets.map((dataset: string) => `<li>${dataset}</li>`).join('')
-            const commits = typedNode.commits.map((commit: string) => `<li>${commit}</li>`).join('')
-            return `<div class="tip"><strong>${typedNode.clause}</strong><span>${typedNode.label}</span><p>${typedNode.detail}</p><em>Datasets</em><ul>${datasets}</ul><em>Commit comments</em><ul>${commits}</ul></div>`
-          }}
+          nodeLabel={() => ''}
           nodeCanvasObject={drawNode}
           nodePointerAreaPaint={(node: NodeObject<BrainNode>, color: string, ctx: CanvasRenderingContext2D) => {
             const typedNode = node as NodeObject<BrainNode> & BrainNode
@@ -378,8 +533,12 @@ function App(): JSX.Element {
           }}
           onNodeClick={(node: NodeObject<BrainNode>) => {
             setSelectedNode(node as SimNode)
+            setHumanLoopOpen(false)
           }}
-          onBackgroundClick={() => setSelectedNode(null)}
+          onBackgroundClick={() => {
+            setSelectedNode(null)
+            setHumanLoopOpen(false)
+          }}
           autoPauseRedraw={false}
           cooldownTicks={Infinity}
           d3AlphaDecay={0.012}
@@ -396,73 +555,196 @@ function App(): JSX.Element {
         <span><i className="fallback" /> Fallback</span>
         <span><i className="negative" /> Red line / escalation</span>
       </div>
-      {selectedNode && <AuditPanel node={selectedNode} onClose={() => setSelectedNode(null)} />}
+      {selectedNode && (
+        <AuditPanel
+          node={selectedNode}
+          onClose={() => {
+            setSelectedNode(null)
+            setHumanLoopOpen(false)
+          }}
+          onOpenHumanLoop={() => setHumanLoopOpen(true)}
+        />
+      )}
+      {selectedNode && humanLoopOpen && (
+        <HumanLoopPanel
+          node={selectedNode}
+          onAddFallback={addManualFallback}
+          onDelete={deleteNode}
+          onApprove={approveNode}
+          onSequence={sequenceFallback}
+        />
+      )}
     </main>
   )
 }
 
-function AuditPanel({ node, onClose }: { node: BrainNode; onClose: () => void }): JSX.Element {
-  const version = node.kind === 'topic' ? 'v1.0' : node.kind === 'preferred' ? 'v1.1' : node.kind === 'fallback' ? 'v1.2' : 'v1.3'
+function AuditPanel({ node, onClose, onOpenHumanLoop }: { node: BrainNode; onClose: () => void; onOpenHumanLoop: () => void }): JSX.Element {
   const sourceType = node.kind === 'negative' ? 'Dataset + legal guardrail' : 'Dataset extraction'
   const actor = node.kind === 'negative' ? 'Senior Legal' : node.kind === 'fallback' ? 'Lou Parser, reviewed by Legal' : 'Lou Parser'
   const change = node.kind === 'topic'
     ? 'Created clause family from playbook row.'
     : node.kind === 'preferred'
       ? 'Committed preferred position as the default decision path.'
-      : node.kind === 'fallback'
+        : node.kind === 'fallback'
         ? 'Added negotiable fallback path under lawyer review.'
         : 'Linked red line and escalation trigger into one risk boundary.'
+  const commitHash = `lou-${node.id.slice(0, 7)}`
 
   return (
     <aside className="auditPanel">
-      <button className="closeButton" onClick={onClose} aria-label="Close audit panel">Close</button>
-      <p className="panelKicker">Version control</p>
-      <h2>{node.clause}</h2>
-      <span className={`typePill ${node.kind}`}>{node.label}</span>
+      <div className="panelTop">
+        <div>
+          <p className="panelKicker">Selected decision node</p>
+          <h2>{node.label}</h2>
+        </div>
+        <button className="closeButton" onClick={onClose} aria-label="Close audit panel">Close</button>
+      </div>
+
+      <div className="panelSummary">
+        <span className={`typePill ${node.kind}`}>{node.label}</span>
+        <span className="statusPill">{node.lifecycle === 'staged' ? 'Staged for review' : node.lifecycle === 'approved' ? 'Approved' : 'Active'}</span>
+      </div>
+
+      <button className="reviewButton" type="button" onClick={onOpenHumanLoop}>Review change</button>
 
       <section>
-        <dl>
+        <h3>Provenance</h3>
+        <dl className="metadataGrid">
           <div>
-            <dt>Version</dt>
-            <dd>{version}</dd>
+            <dt>Decision family</dt>
+            <dd>{node.clause}</dd>
           </div>
           <div>
-            <dt>Source type</dt>
+            <dt>Origin</dt>
             <dd>{sourceType}</dd>
           </div>
           <div>
-            <dt>Dataset</dt>
+            <dt>Last actor</dt>
+            <dd>{actor}</dd>
+          </div>
+          <div>
+            <dt>Dataset used</dt>
             <dd>{node.datasets.join(', ')}</dd>
+          </div>
+          <div>
+            <dt>Commit ID</dt>
+            <dd>{commitHash}</dd>
           </div>
         </dl>
       </section>
 
       <section>
-        <h3>Current Text</h3>
+        <h3>Current rule text</h3>
         <p>{node.detail}</p>
       </section>
 
       <section>
-        <h3>Commits</h3>
+        <h3>Commit history</h3>
         <ol className="commits">
           <li>
-            <strong>{actor}</strong>
-            <span>Today, 12:18</span>
+            <div>
+              <strong>{actor}</strong>
+              <span>Today, 12:18</span>
+            </div>
             <p>{change}</p>
+            <small>Change type: {node.kind === 'negative' ? 'legal guardrail' : 'structured extraction'}</small>
           </li>
           <li>
-            <strong>Lou Parser</strong>
-            <span>Today, 12:03</span>
+            <div>
+              <strong>Lou Parser</strong>
+              <span>Today, 12:03</span>
+            </div>
             <p>{node.commits[0]}</p>
+            <small>Source: {node.datasets[0]}</small>
           </li>
           <li>
-            <strong>Dataset import</strong>
-            <span>Today, 12:00</span>
+            <div>
+              <strong>Dataset import</strong>
+              <span>Today, 12:00</span>
+            </div>
             <p>Imported from {node.datasets[0]}.</p>
+            <small>Manual change: no</small>
           </li>
         </ol>
       </section>
     </aside>
+  )
+}
+
+function HumanLoopPanel(props: {
+  node: BrainNode
+  onAddFallback: (node: BrainNode, note: string, documentTitle: string, lawyer: string) => void
+  onDelete: (node: BrainNode, note: string, documentTitle: string, lawyer: string) => void
+  onApprove: (node: BrainNode, note: string, documentTitle: string, lawyer: string) => void
+  onSequence: (node: BrainNode, action: 'move_earlier' | 'move_later', note: string, documentTitle: string, lawyer: string) => void
+}): JSX.Element {
+  const [action, setAction] = React.useState<HumanAction>('approve')
+  const [documentTitle, setDocumentTitle] = React.useState<string>(savedDocuments[0])
+  const [lawyer, setLawyer] = React.useState<string>(lawyers[0])
+  const [note, setNote] = React.useState<string>('')
+  const [staged, setStaged] = React.useState<boolean>(false)
+
+  React.useEffect(() => {
+    setAction('approve')
+    setDocumentTitle(savedDocuments[0])
+    setLawyer(lawyers[0])
+    setNote('')
+    setStaged(false)
+  }, [props.node.id])
+
+  function commit(): void {
+    if (action === 'add_fallback') props.onAddFallback(props.node, note, documentTitle, lawyer)
+    if (action === 'delete') props.onDelete(props.node, note, documentTitle, lawyer)
+    if (action === 'approve') props.onApprove(props.node, note, documentTitle, lawyer)
+    if (action === 'move_earlier' || action === 'move_later') props.onSequence(props.node, action, note, documentTitle, lawyer)
+    setStaged(false)
+    setNote('')
+  }
+
+  return (
+    <section className={`humanLoop ${staged ? 'staged' : ''}`}>
+      <p className="panelKicker">Human in the loop</p>
+      <div className="gitFlow" aria-label="Legal approval flow">
+        <span className={staged ? 'done' : ''}>add</span>
+        <span className={staged ? 'done' : ''}>commit</span>
+        <span>push</span>
+      </div>
+
+      <label>
+        Action
+        <select value={action} onChange={(event: React.ChangeEvent<HTMLSelectElement>) => setAction(event.target.value as HumanAction)}>
+          <option value="approve">Accept selected node</option>
+          <option value="add_fallback">Add fallback child</option>
+          <option value="move_earlier">Move fallback earlier</option>
+          <option value="move_later">Move fallback later</option>
+          <option value="delete">Delete selected node</option>
+        </select>
+      </label>
+
+      <label>
+        Saved document
+        <select value={documentTitle} onChange={(event: React.ChangeEvent<HTMLSelectElement>) => setDocumentTitle(event.target.value)}>
+          {savedDocuments.map((document: string) => <option key={document}>{document}</option>)}
+        </select>
+      </label>
+
+      <label>
+        Lawyer
+        <select value={lawyer} onChange={(event: React.ChangeEvent<HTMLSelectElement>) => setLawyer(event.target.value)}>
+          {lawyers.map((name: string) => <option key={name}>{name}</option>)}
+        </select>
+      </label>
+
+      <label>
+        Commit note
+        <textarea value={note} onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => setNote(event.target.value)} placeholder="Explain why this legal knowledge changed." />
+      </label>
+
+      <div className="humanActions">
+        <button type="button" onClick={() => setStaged(true)}>Stage change</button>
+        <button type="button" className="commitButton" onClick={commit}>Commit approved change</button>
+      </div>
+    </section>
   )
 }
 

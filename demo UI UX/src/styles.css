@@ -153,21 +153,25 @@ body {
   top: 24px;
   right: 24px;
   bottom: 24px;
-  width: min(360px, calc(100vw - 36px));
+  width: min(390px, calc(100vw - 36px));
   overflow: auto;
-  padding: 18px;
+  padding: 20px;
   color: var(--ink);
-  background: rgba(255, 250, 240, .92);
+  background: rgba(255, 251, 243, .95);
   border: 1px solid rgba(47, 42, 34, .14);
-  border-radius: 12px;
-  box-shadow: 0 28px 70px rgba(47, 42, 34, .18);
+  border-radius: 10px;
+  box-shadow: 0 30px 80px rgba(47, 42, 34, .18);
   backdrop-filter: blur(10px);
 }
 
+.panelTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
 .closeButton {
-  position: absolute;
-  top: 14px;
-  right: 14px;
   height: 28px;
   border: 1px solid rgba(47, 42, 34, .14);
   background: transparent;
@@ -187,16 +191,21 @@ body {
 }
 
 .auditPanel h2 {
-  max-width: 260px;
-  margin: 0 0 10px;
-  font-size: 22px;
+  margin: 0;
+  font-size: 23px;
   line-height: 1.12;
   font-weight: 520;
 }
 
+.panelSummary {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 16px 0 20px;
+}
+
 .typePill {
   display: inline-flex;
-  margin-bottom: 18px;
   padding: 5px 8px;
   border: 1px solid rgba(47, 42, 34, .13);
   border-radius: 999px;
@@ -214,6 +223,145 @@ body {
 
 .typePill.negative {
   color: var(--risk);
+}
+
+.statusPill {
+  display: inline-flex;
+  padding: 5px 8px;
+  border: 1px solid rgba(0, 153, 153, .28);
+  border-radius: 999px;
+  color: var(--turquoise);
+  background: rgba(0, 153, 153, .06);
+  font-size: 12px;
+}
+
+.reviewButton {
+  width: 100%;
+  min-height: 36px;
+  margin: 0 0 6px;
+  border: 1px solid rgba(0, 153, 153, .28);
+  background: rgba(0, 153, 153, .08);
+  color: #006865;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.humanLoop {
+  position: fixed;
+  z-index: 7;
+  right: 430px;
+  bottom: 24px;
+  width: min(330px, calc(100vw - 48px));
+  padding: 16px;
+  color: var(--ink);
+  background: rgba(255, 251, 243, .93);
+  border: 1px solid rgba(47, 42, 34, .13);
+  border-radius: 10px;
+  box-shadow: 0 24px 60px rgba(47, 42, 34, .14);
+  backdrop-filter: blur(10px);
+  transform: translateY(0);
+  transition: transform .22s ease, border-color .22s ease, box-shadow .22s ease;
+}
+
+.humanLoop.staged {
+  border-color: rgba(236, 102, 2, .38);
+  box-shadow: 0 24px 60px rgba(236, 102, 2, .15);
+  animation: stagePulse 1.2s ease-in-out infinite;
+}
+
+@keyframes stagePulse {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.gitFlow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+  margin-bottom: 14px;
+}
+
+.gitFlow span {
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(47, 42, 34, .12);
+  border-radius: 999px;
+  color: rgba(47, 42, 34, .62);
+  font-size: 12px;
+}
+
+.gitFlow span.done {
+  color: #7b3a00;
+  border-color: rgba(236, 102, 2, .38);
+  background: rgba(236, 102, 2, .08);
+}
+
+.humanLoop label {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.humanLoop select,
+.humanLoop textarea {
+  width: 100%;
+  border: 1px solid rgba(47, 42, 34, .14);
+  background: rgba(255, 255, 255, .42);
+  color: var(--ink);
+  border-radius: 7px;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.humanLoop select {
+  height: 34px;
+  padding: 0 9px;
+}
+
+.humanLoop textarea {
+  min-height: 74px;
+  resize: vertical;
+  padding: 9px;
+  line-height: 1.4;
+}
+
+.humanLoop select:focus,
+.humanLoop textarea:focus {
+  border-color: rgba(0, 153, 153, .45);
+}
+
+.humanActions {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.humanActions button {
+  min-height: 34px;
+  border: 1px solid rgba(47, 42, 34, .14);
+  background: transparent;
+  color: var(--ink);
+  border-radius: 7px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.humanActions .commitButton {
+  border-color: rgba(0, 153, 153, .32);
+  background: rgba(0, 153, 153, .1);
+  color: #006865;
 }
 
 .auditPanel section {
@@ -237,16 +385,15 @@ body {
   font-size: 13px;
 }
 
-.auditPanel dl {
+.metadataGrid {
   display: grid;
-  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 14px;
   margin: 0;
 }
 
-.auditPanel dl div {
-  display: grid;
-  grid-template-columns: 90px 1fr;
-  gap: 10px;
+.metadataGrid div {
+  min-width: 0;
 }
 
 .auditPanel dt {
@@ -259,6 +406,7 @@ body {
   color: #3b332a;
   font-size: 12px;
   line-height: 1.4;
+  word-break: break-word;
 }
 
 .commits {
@@ -270,8 +418,26 @@ body {
 }
 
 .commits li {
-  padding-left: 12px;
-  border-left: 2px solid rgba(0, 153, 153, .28);
+  position: relative;
+  padding: 11px 0 11px 15px;
+  border-left: 1px solid rgba(0, 153, 153, .26);
+}
+
+.commits li::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: 16px;
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  background: var(--turquoise);
+}
+
+.commits li div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .commits strong,
@@ -284,64 +450,24 @@ body {
 }
 
 .commits span {
-  margin: 2px 0 5px;
   color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.commits p {
+  margin-top: 6px;
+}
+
+.commits small {
+  display: block;
+  margin-top: 5px;
+  color: rgba(122, 108, 92, .82);
   font-size: 11px;
 }
 
 .scene-nav-info {
   display: none;
-}
-
-.tip {
-  max-width: 310px;
-  padding: 12px 13px;
-  color: #2f2a22;
-  background: rgba(255, 251, 242, .96);
-  border: 1px solid rgba(47, 42, 34, .13);
-  border-radius: 10px;
-  box-shadow: 0 18px 50px rgba(47, 42, 34, .16);
-  font-size: 12px;
-  line-height: 1.42;
-}
-
-.tip strong,
-.tip span,
-.tip em {
-  display: block;
-}
-
-.tip strong {
-  margin-bottom: 4px;
-  font-size: 13px;
-}
-
-.tip span {
-  color: var(--turquoise);
-  margin-bottom: 8px;
-}
-
-.tip p {
-  margin: 0 0 10px;
-  color: #4d4336;
-}
-
-.tip em {
-  margin: 8px 0 3px;
-  color: #756957;
-  font-style: normal;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: .08em;
-}
-
-.tip ul {
-  margin: 0;
-  padding-left: 15px;
-}
-
-.tip li {
-  margin: 2px 0;
 }
 
 @media (max-width: 720px) {
@@ -370,5 +496,16 @@ body {
     bottom: 54px;
     width: auto;
     max-height: 48vh;
+  }
+
+  .metadataGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .humanLoop {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    width: auto;
   }
 }
