@@ -9,7 +9,7 @@ from backend.core.schema import (
     ProposedCommit, Commit, Rule,
     ApprovalRequest, ApprovalStatus, ChangeType,
 )
-from backend.services.vector_store import add_rule, delete_rule
+from backend.services.vector_store import add_commit, add_rule
 
 router = APIRouter(prefix="/api/review", tags=["review"])
 
@@ -22,6 +22,13 @@ async def list_pending():
             .where(ProposedCommit.approval_status == ApprovalStatus.PENDING)
             .order_by(col(ProposedCommit.created_at).desc())
         ).all()
+    order = {
+        ChangeType.CONTRADICTS: 0,
+        ChangeType.EXTENDS: 1,
+        ChangeType.NEW_RULE: 2,
+        ChangeType.CONFIRMS: 3,
+    }
+    pending = sorted(pending, key=lambda item: order.get(item.change_type, 99))
     return [p.model_dump() for p in pending]
 
 
@@ -70,7 +77,7 @@ async def approve_or_reject(proposed_id: int, body: ApprovalRequest):
                     topic=proposed_data.get("topic", pc.rule_id),
                     category="Other",
                     rule_type="standard",
-                    standard_position=proposed_data.get("implied_position", ""),
+                    standard_position=body.proposed_text or proposed_data.get("implied_position", ""),
                     reasoning=pc.ai_reasoning,
                     sources=json.dumps([pc.source_document]),
                     confidence=pc.cosine_similarity,
@@ -85,8 +92,9 @@ async def approve_or_reject(proposed_id: int, body: ApprovalRequest):
             elif rule:
                 # Update existing rule
                 implied = proposed_data.get("implied_position", "")
-                if implied and pc.change_type in (ChangeType.CONTRADICTS, ChangeType.EXTENDS):
-                    rule.fallback_position = (rule.fallback_position or "") + f"\n[Updated from {pc.source_document}]: {implied}"
+                update_text = body.proposed_text or implied
+                if update_text and pc.change_type in (ChangeType.CONTRADICTS, ChangeType.EXTENDS, ChangeType.CONFIRMS):
+                    rule.fallback_position = (rule.fallback_position or "") + f"\n[Updated from {pc.source_document}]: {update_text}"
                     rule.version += 1
                     rule.committed_by = body.lawyer_name
                     rule.committed_at = pc.reviewed_at
@@ -101,6 +109,7 @@ async def approve_or_reject(proposed_id: int, body: ApprovalRequest):
             commit = Commit(
                 commit_hash=_commit_hash(pc.rule_id, now_str),
                 rule_id=pc.rule_id,
+                topic=pc.topic or (rule.topic if rule else pc.rule_id),
                 change_type=pc.change_type,
                 old_value=old_snapshot,
                 new_value=new_snapshot,
@@ -112,11 +121,14 @@ async def approve_or_reject(proposed_id: int, body: ApprovalRequest):
                 approval_status=ApprovalStatus.APPROVED,
             )
             session.add(commit)
+            session.flush()
+            add_commit(commit, commit.topic)
         else:
             # Rejected — just log it
             commit = Commit(
                 commit_hash=_commit_hash(pc.rule_id + "_reject", now_str),
                 rule_id=pc.rule_id,
+                topic=pc.topic or pc.rule_id,
                 change_type=pc.change_type,
                 old_value=pc.existing_rule_snapshot,
                 new_value=json.dumps({"rejected": True, "reason": body.lawyer_note}),
@@ -131,4 +143,4 @@ async def approve_or_reject(proposed_id: int, body: ApprovalRequest):
         session.commit()
         session.refresh(pc)
 
-    return pc.model_dump()
+    return {"status": pc.approval_status, "commit_hash": commit.commit_hash, "item": pc.model_dump()}

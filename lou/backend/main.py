@@ -5,6 +5,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -15,6 +16,8 @@ from backend.api.routes import playbook, chat, graph, commits, review, contracts
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
+    Path(settings.chroma_persist_dir).mkdir(parents=True, exist_ok=True)
     create_db_and_tables()
     from backend.services.embedder import get_embedder
     get_embedder()
@@ -40,6 +43,11 @@ app.include_router(contracts.router)
 app.include_router(export.router)
 
 
-@app.get("/health")
+@app.get("/api/health")
 async def health():
-    return {"status": "ok", "service": "Lou API"}
+    return {"status": "ok"}
+
+
+@app.get("/health")
+async def legacy_health():
+    return {"status": "ok"}

@@ -22,11 +22,19 @@ class ApprovalStatus(str, Enum):
     REJECTED = "rejected"
 
 
+class RuleType(str, Enum):
+    STANDARD = "standard"
+    FALLBACK = "fallback"
+    RED_LINE = "red_line"
+    ESCALATION = "escalation"
+
+
 class Rule(SQLModel, table=True):
     id: Optional[int] = SQLField(default=None, primary_key=True)
     rule_id: str = SQLField(unique=True, index=True)
     topic: str
     category: str
+    rule_type: RuleType = RuleType.STANDARD
     standard_position: str
     fallback_position: Optional[str] = None
     red_line: Optional[str] = None
@@ -102,6 +110,7 @@ class SourceCitation(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     sources: list[SourceCitation]
+    retrieved_rules: list[str] = Field(default_factory=list)
 
 
 class GraphNode(BaseModel):
@@ -109,6 +118,7 @@ class GraphNode(BaseModel):
     label: str
     topic: str
     category: str
+    rule_type: RuleType = RuleType.STANDARD
     confidence: float
     version: int
     committed_by: str
@@ -119,7 +129,7 @@ class GraphNode(BaseModel):
     reasoning: str
     decision_logic: Optional[str] = None
     sources: list[str]
-    lifecycle: str  # "active" | "staged" | "approved"
+    lifecycle: str = "active"  # "active" | "staged" | "approved"
 
 
 class GraphEdge(BaseModel):

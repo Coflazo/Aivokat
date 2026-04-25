@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from sqlmodel import Session, select
 
 from backend.core.database import engine
-from backend.core.schema import GraphData, GraphNode, GraphEdge, Rule
+from backend.core.schema import ApprovalStatus, GraphData, GraphNode, GraphEdge, ProposedCommit, Rule
 from backend.services.vector_store import get_all_rules, compute_all_similarities
 
 router = APIRouter(prefix="/api/graph", tags=["graph"])
@@ -13,9 +13,14 @@ router = APIRouter(prefix="/api/graph", tags=["graph"])
 async def get_graph() -> GraphData:
     chroma_rules = get_all_rules()
 
-    # Enrich with DB data (fallback_position, red_line, reasoning, suggested_language)
     with Session(engine) as session:
         db_rules = {r.rule_id: r for r in session.exec(select(Rule).where(Rule.is_active == True)).all()}
+        pending_rule_ids = set(session.exec(
+            select(ProposedCommit.rule_id).where(ProposedCommit.approval_status == ApprovalStatus.PENDING)
+        ).all())
+        approved_rule_ids = set(session.exec(
+            select(ProposedCommit.rule_id).where(ProposedCommit.approval_status == ApprovalStatus.APPROVED)
+        ).all())
 
     nodes: list[GraphNode] = []
     for r in chroma_rules:
@@ -25,6 +30,11 @@ async def get_graph() -> GraphData:
         sources = r.get("sources", [])
         if isinstance(sources, str):
             sources = json.loads(sources)
+        lifecycle = "active"
+        if rule_id in pending_rule_ids:
+            lifecycle = "staged"
+        elif rule_id in approved_rule_ids:
+            lifecycle = "approved"
 
         nodes.append(GraphNode(
             id=rule_id,
@@ -39,8 +49,10 @@ async def get_graph() -> GraphData:
             standard_position=r["standard_position"],
             fallback_position=db_rule.fallback_position if db_rule else r.get("fallback_position"),
             red_line=db_rule.red_line if db_rule else r.get("red_line"),
-            reasoning=r.get("reasoning", ""),
+            reasoning=db_rule.reasoning if db_rule else r.get("reasoning", ""),
+            decision_logic=db_rule.decision_logic if db_rule else r.get("decision_logic"),
             sources=sources,
+            lifecycle=lifecycle,
         ))
 
     sim_pairs = compute_all_similarities(threshold=0.35)

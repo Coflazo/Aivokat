@@ -6,7 +6,15 @@ import ForceGraph2D, {
   type LinkObject,
   type NodeObject
 } from 'react-force-graph-2d'
+import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { fetchGraph } from './api/client'
+import { ChatScreen } from './components/ChatScreen'
+import { CommitHistoryScreen } from './components/CommitHistoryScreen'
+import { Nav } from './components/Nav'
+import { ReviewQueueScreen } from './components/ReviewQueueScreen'
+import { UploadModal } from './components/UploadModal'
 import { sourcePlaybookRows, type SourcePlaybookRow } from './playbookData'
+import type { GraphData as ApiGraphData, GraphNode as ApiGraphNode } from './types'
 import './styles.css'
 
 type PositionKind = 'preferred' | 'fallback' | 'negative'
@@ -54,7 +62,7 @@ interface BrainBoundaryForce {
 
 const BRAIN_RX = 330
 const BRAIN_RY = 218
-const playbookRows: PlaybookRow[] = sourcePlaybookRows.map((row: SourcePlaybookRow) => ({ ...row }))
+const fallbackPlaybookRows: PlaybookRow[] = sourcePlaybookRows.map((row: SourcePlaybookRow) => ({ ...row }))
 const savedDocuments: string[] = [
   'Sample NDA Playbook.csv.xlsx',
   'Sample NDA Playbook.docx',
@@ -123,13 +131,34 @@ function createBrainBoundaryForce(): BrainBoundaryForce {
   return force
 }
 
-function buildBrainData(): GraphData<BrainNode, BrainLink> {
+function apiNodeToPlaybookRow(node: ApiGraphNode): PlaybookRow {
+  const fallbacks = (node.fallback_position || '')
+    .split(/\n+/)
+    .map((item: string) => item.replace(/^Fallback \d+:\s*/i, '').trim())
+    .filter(Boolean)
+
+  return {
+    id: node.id,
+    clause: node.topic,
+    why: node.reasoning,
+    preferred: node.standard_position,
+    fallbacks,
+    redLine: node.red_line || 'No red line recorded',
+    escalation: node.decision_logic || 'No escalation trigger recorded',
+    sourceFile: node.sources.join(', ') || 'Lou API',
+  }
+}
+
+function buildBrainData(rows: PlaybookRow[] = fallbackPlaybookRows, apiData?: ApiGraphData): GraphData<BrainNode, BrainLink> {
   const nodes: BrainNode[] = []
   const links: BrainLink[] = []
 
-  playbookRows.forEach((row: PlaybookRow, index: number) => {
+  const lifecycleById = new Map<string, BrainNode['lifecycle']>()
+  apiData?.nodes.forEach((node: ApiGraphNode) => lifecycleById.set(node.id, node.lifecycle))
+
+  rows.forEach((row: PlaybookRow, index: number) => {
     const angle = index * 2.399963
-    const radius = Math.sqrt((index + 1) / playbookRows.length)
+    const radius = Math.sqrt((index + 1) / rows.length)
     const topicPoint = keepInsideBrain(
       Math.cos(angle) * BRAIN_RX * 0.58 * radius,
       Math.sin(angle) * BRAIN_RY * 0.72 * radius,
@@ -151,6 +180,7 @@ function buildBrainData(): GraphData<BrainNode, BrainLink> {
         `Maria Keller: approved initial extraction for ${row.clause}`,
         'Jonas Weber: mapped playbook row into preferred, fallback, and risk positions'
       ],
+      lifecycle: lifecycleById.get(row.id),
       x: topicX,
       y: topicY,
       val: 6
@@ -228,9 +258,9 @@ function buildBrainData(): GraphData<BrainNode, BrainLink> {
     }
   })
 
-  playbookRows.forEach((row: PlaybookRow, index: number) => {
+  rows.forEach((row: PlaybookRow, index: number) => {
     const currentTopic = `topic_${row.id}`
-    const nextTopic = `topic_${playbookRows[(index + 1) % playbookRows.length].id}`
+    const nextTopic = `topic_${rows[(index + 1) % rows.length].id}`
     links.push({ source: currentTopic, target: nextTopic, strength: 0.18, kind: 'fallback' })
   })
 
@@ -247,6 +277,15 @@ function buildBrainData(): GraphData<BrainNode, BrainLink> {
 
   conceptualBridges.forEach(([source, target]: [string, string]) => {
     links.push({ source, target, strength: 0.12, kind: 'preferred' })
+  })
+
+  apiData?.edges.forEach((edge) => {
+    links.push({
+      source: `topic_${edge.source}`,
+      target: `topic_${edge.target}`,
+      strength: Math.max(0.08, Math.min(0.34, edge.similarity / 2)),
+      kind: 'preferred'
+    })
   })
 
   return { nodes, links }
@@ -300,6 +339,22 @@ function App(): JSX.Element {
   const [graphData, setGraphData] = React.useState<GraphData<BrainNode, BrainLink>>(() => buildBrainData())
   const [selectedNode, setSelectedNode] = React.useState<BrainNode | null>(null)
   const [humanLoopOpen, setHumanLoopOpen] = React.useState<boolean>(false)
+
+  async function loadLiveGraph(): Promise<void> {
+    try {
+      const apiData = await fetchGraph()
+      if (apiData.nodes.length > 0) {
+        const rows = apiData.nodes.map(apiNodeToPlaybookRow)
+        setGraphData(buildBrainData(rows, apiData))
+      }
+    } catch {
+      setGraphData(buildBrainData())
+    }
+  }
+
+  React.useEffect(() => {
+    void loadLiveGraph()
+  }, [])
 
   function updateNode(nodeId: string, updater: (node: BrainNode) => BrainNode): void {
     setGraphData((current: GraphData<BrainNode, BrainLink>) => ({
@@ -491,7 +546,7 @@ function App(): JSX.Element {
 
   return (
     <main className="creamPage">
-      <div className="brand">
+      <div className="brand" style={{ left: 104 }}>
         <strong>Lou</strong>
       </div>
       <div className="brainShell" aria-label="Lou playbook brain">
@@ -549,7 +604,7 @@ function App(): JSX.Element {
           enableZoomInteraction
         />
       </div>
-      <div className="legend">
+      <div className="legend" style={{ left: 104 }}>
         <span><i className="preferred" /> Preferred</span>
         <span><i className="fallback" /> Fallback</span>
         <span><i className="negative" /> Red line / escalation</span>
@@ -574,6 +629,36 @@ function App(): JSX.Element {
         />
       )}
     </main>
+  )
+}
+
+function Shell(): JSX.Element {
+  const [pendingCount, setPendingCount] = React.useState(0)
+  const [uploadOpen, setUploadOpen] = React.useState(false)
+  const [refreshKey, setRefreshKey] = React.useState(0)
+
+  React.useEffect(() => {
+    fetch('http://localhost:8000/api/review')
+      .then((response) => response.ok ? response.json() : [])
+      .then((items: unknown[]) => setPendingCount(items.length))
+      .catch(() => setPendingCount(0))
+  }, [refreshKey])
+
+  function markChanged(): void {
+    setRefreshKey((value) => value + 1)
+  }
+
+  return (
+    <>
+      <Nav pendingCount={pendingCount} onUpload={() => setUploadOpen(true)} />
+      {uploadOpen && <UploadModal onClose={() => setUploadOpen(false)} onDone={markChanged} />}
+      <Routes>
+        <Route path="/" element={<App key={refreshKey} />} />
+        <Route path="/chat" element={<ChatScreen />} />
+        <Route path="/history" element={<CommitHistoryScreen />} />
+        <Route path="/review" element={<ReviewQueueScreen onReviewed={markChanged} />} />
+      </Routes>
+    </>
   )
 }
 
@@ -749,6 +834,8 @@ function HumanLoopPanel(props: {
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    <BrowserRouter>
+      <Shell />
+    </BrowserRouter>
   </React.StrictMode>
 )

@@ -7,5 +7,10 @@ Initial Commit
 demo UI UX/
 lou/.env
 lou/backend/data/
-
+node_modules/
+lou/node_modules/
+lou/dist/
+__pycache__/
+*.pyc
+~$*
 

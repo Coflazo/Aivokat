@@ -26,7 +26,7 @@ async def upload_playbook(
     lawyer_name: str = Form("Anonymous"),
 ):
     os.makedirs(settings.upload_dir, exist_ok=True)
-    safe_name = file.filename.replace(" ", "_")
+    safe_name = (file.filename or "playbook").replace(" ", "_")
     dest = os.path.join(settings.upload_dir, safe_name)
 
     with open(dest, "wb") as f:
@@ -75,6 +75,7 @@ async def upload_playbook(
             commit = Commit(
                 commit_hash=_make_commit_hash(rule_id, now_str),
                 rule_id=rule_id,
+                topic=rule.topic,
                 change_type=ChangeType.INITIAL,
                 old_value=None,
                 new_value=json.dumps({
@@ -108,9 +109,42 @@ async def upload_playbook(
                 fallback_position=rule.fallback_position,
                 red_line=rule.red_line,
                 reasoning=rule.reasoning,
+                decision_logic=rule.decision_logic,
                 sources=sources_list,
+                lifecycle="active",
             ))
 
         session.commit()
 
     return {"rules_created": len(created_rules), "rules": [r.model_dump() for r in created_rules]}
+
+
+@router.post("/upload-contract")
+async def upload_contract(
+    file: UploadFile = File(...),
+    lawyer_name: str = Form("Anonymous"),
+):
+    from backend.services.evolution import process_new_contract
+
+    os.makedirs(settings.upload_dir, exist_ok=True)
+    safe_name = (file.filename or "contract").replace(" ", "_")
+    dest = os.path.join(settings.upload_dir, safe_name)
+
+    with open(dest, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    try:
+        proposed = await process_new_contract(dest, safe_name, lawyer_name)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Contract processing error: {e}")
+
+    counts: dict[str, int] = {}
+    for item in proposed:
+        key = item.change_type.value if hasattr(item.change_type, "value") else str(item.change_type)
+        counts[key] = counts.get(key, 0) + 1
+
+    return {
+        "proposed_commits": len(proposed),
+        "breakdown": counts,
+        "document": safe_name,
+    }

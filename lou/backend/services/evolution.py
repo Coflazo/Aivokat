@@ -5,10 +5,10 @@ from docx import Document
 import pypdf
 
 from backend.core.schema import ProposedCommit, ChangeType, ApprovalStatus
-from backend.core.database import get_session
+from backend.core.database import engine
 from backend.services.vector_store import search_rules
-from backend.services.embedder import embed_text
 from backend.services.llm import complete_json, complete
+from sqlmodel import Session, select
 
 CLAUSE_EXTRACTION_SYSTEM = """You extract individual negotiation clauses from contract documents.
 Return ONLY valid JSON."""
@@ -115,6 +115,7 @@ async def process_new_contract(
             reasoning = f"No existing playbook rule found for this topic. The contract clause introduces a new position on '{topic}'."
             pc = ProposedCommit(
                 rule_id=topic.lower().replace(" ", "_")[:50],
+                topic=topic,
                 change_type=ChangeType.NEW_RULE,
                 existing_rule_snapshot=None,
                 proposed_change=json.dumps({
@@ -186,6 +187,7 @@ async def process_new_contract(
 
         pc = ProposedCommit(
             rule_id=top_match["rule_id"],
+            topic=top_match["topic"],
             change_type=change_type,
             existing_rule_snapshot=existing_snapshot,
             proposed_change=proposed_change,
@@ -198,19 +200,23 @@ async def process_new_contract(
         )
         proposed.append(pc)
 
-    # Save to DB
-    session_gen = get_session()
-    session = next(session_gen)
-    try:
+    with Session(engine) as session:
+        saved: list[ProposedCommit] = []
         for pc in proposed:
+            existing = session.exec(
+                select(ProposedCommit).where(
+                    ProposedCommit.rule_id == pc.rule_id,
+                    ProposedCommit.source_document == pc.source_document,
+                    ProposedCommit.source_clause == pc.source_clause,
+                    ProposedCommit.change_type == pc.change_type,
+                )
+            ).first()
+            if existing:
+                continue
             session.add(pc)
+            saved.append(pc)
         session.commit()
-        for pc in proposed:
+        for pc in saved:
             session.refresh(pc)
-    finally:
-        try:
-            next(session_gen)
-        except StopIteration:
-            pass
 
-    return proposed
+    return saved
