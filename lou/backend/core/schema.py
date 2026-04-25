@@ -1,0 +1,137 @@
+from __future__ import annotations
+from datetime import datetime
+from enum import Enum
+from typing import Optional
+from pydantic import BaseModel, Field
+from sqlmodel import SQLModel, Field as SQLField
+
+
+class RuleType(str, Enum):
+    STANDARD = "standard"
+    FALLBACK = "fallback"
+    RED_LINE = "red_line"
+    ESCALATION = "escalation"
+
+
+class ChangeType(str, Enum):
+    INITIAL = "initial"
+    CONFIRMS = "confirms"
+    CONTRADICTS = "contradicts"
+    EXTENDS = "extends"
+    NEW_RULE = "new_rule"
+    MANUAL = "manual"
+
+
+class ApprovalStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class Rule(SQLModel, table=True):
+    id: Optional[int] = SQLField(default=None, primary_key=True)
+    rule_id: str = SQLField(unique=True, index=True)
+    topic: str
+    category: str
+    rule_type: RuleType
+    standard_position: str
+    fallback_position: Optional[str] = None
+    red_line: Optional[str] = None
+    reasoning: str
+    suggested_language: Optional[str] = None
+    decision_logic: Optional[str] = None
+    sources: str = "[]"  # JSON-serialized list
+    confidence: float = 1.0
+    version: int = 1
+    committed_by: str
+    committed_at: datetime = SQLField(default_factory=datetime.utcnow)
+    is_active: bool = True
+    chroma_id: Optional[str] = None
+
+
+class Commit(SQLModel, table=True):
+    id: Optional[int] = SQLField(default=None, primary_key=True)
+    commit_hash: str = SQLField(unique=True, index=True)
+    rule_id: str = SQLField(index=True)
+    change_type: ChangeType
+    old_value: Optional[str] = None
+    new_value: str
+    source_document: Optional[str] = None
+    source_clause: Optional[str] = None
+    lawyer_note: Optional[str] = None
+    committed_by: str
+    committed_at: datetime = SQLField(default_factory=datetime.utcnow)
+    approval_status: ApprovalStatus = ApprovalStatus.APPROVED
+
+
+class ProposedCommit(SQLModel, table=True):
+    id: Optional[int] = SQLField(default=None, primary_key=True)
+    rule_id: str
+    change_type: ChangeType
+    existing_rule_snapshot: Optional[str] = None
+    proposed_change: str
+    source_document: str
+    source_clause: str
+    cosine_similarity: float
+    ai_reasoning: str
+    approval_status: ApprovalStatus = ApprovalStatus.PENDING
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    lawyer_note: Optional[str] = None
+    created_at: datetime = SQLField(default_factory=datetime.utcnow)
+
+
+# ── API Request/Response Models ───────────────────────────────────────────────
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    message: str
+    history: list[ChatMessage] = Field(default_factory=list)
+    lawyer_name: str = "Anonymous"
+
+
+class ChatResponse(BaseModel):
+    answer: str
+    sources: list[dict]
+    retrieved_rules: list[str]
+
+
+class GraphNode(BaseModel):
+    id: str
+    label: str
+    topic: str
+    category: str
+    rule_type: RuleType
+    confidence: float
+    version: int
+    committed_by: str
+    committed_at: str
+    standard_position: str
+    fallback_position: Optional[str] = None
+    red_line: Optional[str] = None
+    reasoning: str
+    sources: list[str]
+    x: Optional[float] = None
+    y: Optional[float] = None
+
+
+class GraphEdge(BaseModel):
+    source: str
+    target: str
+    similarity: float
+
+
+class GraphData(BaseModel):
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
+
+
+class ApprovalRequest(BaseModel):
+    proposed_commit_id: int
+    decision: ApprovalStatus
+    lawyer_name: str
+    lawyer_note: Optional[str] = None
