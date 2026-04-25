@@ -4,14 +4,23 @@ InitialCommit.txt
 Initial Commit
 .claude
 .DS_Store
+**/.DS_Store
 demo UI UX/
 lou/.env
 lou/backend/data/
+lou/backend/data/chroma/
+lou/backend/data/uploads/
+lou/backend/data/*.db
+lou/backend/data/*.sqlite
 node_modules/
 lou/node_modules/
 lou/dist/
+lou/.vite/
+lou/.cache/
 __pycache__/
+**/__pycache__/
 *.pyc
+*.pyo
 ~$*
 
 *.safetensors

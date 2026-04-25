@@ -11,7 +11,21 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.core.database import create_db_and_tables
 from backend.core.config import settings
-from backend.api.routes import playbook, chat, graph, commits, review, contracts, export
+from backend.api.routes import (
+    analysis,
+    api_console,
+    chat,
+    commits,
+    contracts,
+    export,
+    graph,
+    health as health_route,
+    mega_brain,
+    playbook,
+    playbooks,
+    rewrite,
+    review,
+)
 
 
 @asynccontextmanager
@@ -35,17 +49,18 @@ app.add_middleware(
 )
 
 app.include_router(playbook.router)
+app.include_router(playbooks.router)
+app.include_router(rewrite.router)
+app.include_router(analysis.router)
+app.include_router(api_console.router)
+app.include_router(mega_brain.router)
+app.include_router(health_route.router)
 app.include_router(chat.router)
 app.include_router(graph.router)
 app.include_router(commits.router)
 app.include_router(review.router)
 app.include_router(contracts.router)
 app.include_router(export.router)
-
-
-@app.get("/api/health")
-async def health():
-    return {"status": "ok"}
 
 
 @app.get("/health")

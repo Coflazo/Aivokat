@@ -8,11 +8,15 @@ import ForceGraph2D, {
 } from 'react-force-graph-2d'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { fetchGraph } from './api/client'
-import { ChatScreen } from './components/ChatScreen'
-import { CommitHistoryScreen } from './components/CommitHistoryScreen'
 import { Nav } from './components/Nav'
-import { ReviewQueueScreen } from './components/ReviewQueueScreen'
 import { UploadModal } from './components/UploadModal'
+import {
+  ApiConsolePage,
+  MegaBrainPage,
+  PlaybookAnalysisPage,
+  PlaybookEditorPage,
+  UploadPlaybookPage
+} from './pages'
 import { sourcePlaybookRows, type SourcePlaybookRow } from './playbookData'
 import type { GraphData as ApiGraphData, GraphNode as ApiGraphNode } from './types'
 import './styles.css'
@@ -653,10 +657,12 @@ function Shell(): JSX.Element {
       <Nav pendingCount={pendingCount} onUpload={() => setUploadOpen(true)} />
       {uploadOpen && <UploadModal onClose={() => setUploadOpen(false)} onDone={markChanged} />}
       <Routes>
-        <Route path="/" element={<App key={refreshKey} />} />
-        <Route path="/chat" element={<ChatScreen />} />
-        <Route path="/history" element={<CommitHistoryScreen />} />
-        <Route path="/review" element={<ReviewQueueScreen onReviewed={markChanged} />} />
+        <Route path="/" element={<UploadPlaybookPage />} />
+        <Route path="/playbooks/:playbookId/edit" element={<PlaybookEditorPage />} />
+        <Route path="/playbooks/:playbookId/analysis" element={<PlaybookAnalysisPage />} />
+        <Route path="/playbooks/:playbookId/brain" element={<App key={refreshKey} />} />
+        <Route path="/api-console" element={<ApiConsolePage />} />
+        <Route path="/mega-brain" element={<MegaBrainPage />} />
       </Routes>
     </>
   )

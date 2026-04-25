@@ -1,4 +1,4 @@
-import { ClipboardCheck, Download, GitCommit, MessageSquare, Network, Upload } from 'lucide-react'
+import { BrainCircuit, Braces, Download, FileSpreadsheet, Network, SearchCode, Upload, Wand2 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { exportExcel } from '../api/client'
 
@@ -15,10 +15,12 @@ const itemStyle: React.CSSProperties = {
 
 export function Nav({ pendingCount, onUpload }: { pendingCount: number; onUpload: () => void }): JSX.Element {
   const items = [
-    { to: '/', label: 'Map', icon: Network },
-    { to: '/chat', label: 'Ask Lou', icon: MessageSquare },
-    { to: '/history', label: 'History', icon: GitCommit },
-    { to: '/review', label: 'Review', icon: ClipboardCheck, badge: pendingCount },
+    { to: '/', label: 'Upload', icon: Upload },
+    { to: '/playbooks/current/edit', label: 'Editor', icon: FileSpreadsheet },
+    { to: '/playbooks/current/analysis', label: 'Logic', icon: Wand2 },
+    { to: '/playbooks/current/brain', label: 'Brain', icon: Network, badge: pendingCount },
+    { to: '/api-console', label: 'API', icon: Braces },
+    { to: '/mega-brain', label: 'Mega', icon: BrainCircuit },
   ]
 
   return (
@@ -40,8 +42,8 @@ export function Nav({ pendingCount, onUpload }: { pendingCount: number; onUpload
         title="Upload"
         style={{ ...itemStyle, border: 0, background: 'transparent', cursor: 'pointer' }}
       >
-        <Upload size={19} />
-        Upload
+        <SearchCode size={19} />
+        Lou
       </button>
       <nav style={{ display: 'grid', gap: 4, marginTop: 10 }}>
         {items.map((item) => {
