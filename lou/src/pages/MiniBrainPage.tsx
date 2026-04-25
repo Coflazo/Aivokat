@@ -4,7 +4,7 @@ import { GitCommit, Send, Upload, X } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { fetchPlaybookBrain, publishPlaybook, analyzePublicContractFile } from '../api/client'
 import { BrainLoader } from '../components/BrainLoader'
-import type { AnalyzeContractResponse, BrainEdgeView, BrainNodeView, PlaybookBrain } from '../types'
+import type { AnalyzeContractResponse, AnalyzedContractClause, BrainEdgeView, BrainNodeView, PlaybookBrain } from '../types'
 import { resolvePlaybookId, saveCurrentPlaybookId } from '../utils/currentPlaybook'
 import { useUser } from '../contexts/UserContext'
 
@@ -36,15 +36,11 @@ export function MiniBrainPage(): JSX.Element {
   const [dims, setDims] = React.useState({ w: 800, h: 600 })
   const [brain, setBrain] = React.useState<PlaybookBrain | null>(null)
   const [selected, setSelected] = React.useState<BrainNodeView | null>(null)
+  const [citation, setCitation] = React.useState<AnalyzedContractClause | null>(null)
   const [tooltip, setTooltip] = React.useState<{ x: number; y: number; text: string } | null>(null)
   const mousePos = React.useRef({ x: 0, y: 0 })
 
-  React.useEffect(() => {
-    function track(e: MouseEvent): void { mousePos.current = { x: e.clientX, y: e.clientY } }
-    window.addEventListener('mousemove', track)
-    return () => window.removeEventListener('mousemove', track)
-  }, [])
-
+  // Commit/publish state
   const [committedBy, setCommittedBy] = React.useState(user?.name ?? 'Peter')
   const [comment, setComment] = React.useState('')
   const [committed, setCommitted] = React.useState(false)
@@ -54,26 +50,47 @@ export function MiniBrainPage(): JSX.Element {
   const [isSuccess, setIsSuccess] = React.useState(false)
   const [commentError, setCommentError] = React.useState(false)
 
-  // Contract upload — Peter only
+  // Contract analysis — available to all roles
   const [contractAnalysis, setContractAnalysis] = React.useState<AnalyzeContractResponse | null>(null)
   const [matchedIds, setMatchedIds] = React.useState<Set<string>>(new Set())
   const [uploading, setUploading] = React.useState(false)
-  const [circleProgress, setCircleProgress] = React.useState(0)
-  const circleAnimRef = React.useRef<number>(0)
   const contractFileRef = React.useRef<HTMLInputElement>(null)
+  const circleAnimRef = React.useRef<number>(0)
 
+  // Refs so onRenderFramePre never has a stale closure
+  const contractAnalysisRef = React.useRef<AnalyzeContractResponse | null>(null)
+  const circleProgressRef = React.useRef(0)
+  const matchedIdsRef = React.useRef<Set<string>>(new Set())
+
+  React.useEffect(() => {
+    contractAnalysisRef.current = contractAnalysis
+    if (!contractAnalysis) circleProgressRef.current = 0
+  }, [contractAnalysis])
+
+  React.useEffect(() => {
+    matchedIdsRef.current = matchedIds
+  }, [matchedIds])
+
+  React.useEffect(() => {
+    function track(e: MouseEvent): void { mousePos.current = { x: e.clientX, y: e.clientY } }
+    window.addEventListener('mousemove', track)
+    return () => window.removeEventListener('mousemove', track)
+  }, [])
+
+  // Contract circle d3 force
   React.useEffect(() => {
     const graph = graphRef.current
     if (!graph || !contractAnalysis) return
     const cx = dims.w / 2
     const cy = dims.h / 2
     const R = Math.min(dims.w, dims.h) * 0.41
+
     function contractForce(alpha: number): void {
       for (const node of (graph.graphData()?.nodes ?? [])) {
         const nx = (node.x ?? cx) - cx
         const ny = (node.y ?? cy) - cy
         const dist = Math.sqrt(nx * nx + ny * ny) || 1
-        if (matchedIds.has(node.id)) {
+        if (matchedIdsRef.current.has(node.id)) {
           const pull = ((dist - R) / dist) * alpha * 0.22
           node.vx = (node.vx ?? 0) - nx * pull
           node.vy = (node.vy ?? 0) - ny * pull
@@ -87,44 +104,63 @@ export function MiniBrainPage(): JSX.Element {
     ;(contractForce as any).initialize = (): void => {}
     graph.d3Force('contractCircle', contractForce)
     graph.d3ReheatSimulation()
+
+    // Animate circle — write directly to ref so onRenderFramePre always reads fresh value
+    cancelAnimationFrame(circleAnimRef.current)
+    circleProgressRef.current = 0
     const start = performance.now()
     function animate(now: number): void {
-      const t = Math.min(1, (now - start) / 1200)
-      setCircleProgress(t)
-      if (t < 1) circleAnimRef.current = requestAnimationFrame(animate)
+      circleProgressRef.current = Math.min(1, (now - start) / 1200)
+      if (circleProgressRef.current < 1) {
+        circleAnimRef.current = requestAnimationFrame(animate)
+      }
     }
     circleAnimRef.current = requestAnimationFrame(animate)
+
     return () => {
       cancelAnimationFrame(circleAnimRef.current)
       graph.d3Force('contractCircle', null)
     }
-  }, [contractAnalysis, matchedIds, dims])
+  }, [contractAnalysis, dims])
 
   async function uploadContract(file: File): Promise<void> {
     setUploading(true)
+    setMessage(null)
     try {
       const result = await analyzePublicContractFile(playbookId, file)
       const ids = new Set<string>()
       for (const c of result.clauses) {
-        if (c.match) ids.add(c.match.matched_clause.clause_id)
+        if (c.match) {
+          ids.add(c.match.matched_clause.clause_id)
+          // Also match child hierarchy nodes
+          ids.add(`${c.match.matched_clause.clause_id}:preferred`)
+        }
       }
       setMatchedIds(ids)
+      matchedIdsRef.current = ids
       setContractAnalysis(result)
+      setCitation(null)
+      setSelected(null)
     } catch {
-      setMessage('Contract analysis failed — make sure the playbook is published.')
+      setMessage('Contract analysis failed — make sure this playbook is published.')
     } finally {
       setUploading(false)
     }
   }
 
   function dismissContract(): void {
+    cancelAnimationFrame(circleAnimRef.current)
+    circleProgressRef.current = 0
+    contractAnalysisRef.current = null
     setContractAnalysis(null)
     setMatchedIds(new Set())
-    setCircleProgress(0)
+    matchedIdsRef.current = new Set()
+    setCitation(null)
     graphRef.current?.d3Force('contractCircle', null)
     graphRef.current?.d3ReheatSimulation()
   }
 
+  // Brain load
   React.useEffect(() => {
     let cancelled = false
     async function load(): Promise<void> {
@@ -180,13 +216,24 @@ export function MiniBrainPage(): JSX.Element {
   function handleNodeClick(node: BrainNodeView): void {
     setSelected(node)
     setTooltip(null)
+    // If contract is active and this node is matched, show citation
+    if (contractAnalysisRef.current) {
+      const clauseId = node.clause?.clause_id ?? node.id
+      const matched = contractAnalysisRef.current.clauses.find(
+        c => c.match?.matched_clause.clause_id === clauseId ||
+             c.match?.matched_clause.clause_id === node.id
+      )
+      setCitation(matched ?? null)
+    } else {
+      setCitation(null)
+    }
   }
 
   const statusLabel = brain ? brain.status.charAt(0).toUpperCase() + brain.status.slice(1).toLowerCase() : '—'
   const issueCount = brain ? brain.nodes.filter(n => n.status === 'issue').length : 0
   const warnCount  = brain ? brain.nodes.filter(n => n.status === 'warning').length : 0
   const clauseCount = brain ? brain.nodes.filter(n => n.node_type === 'clause').length : 0
-  const isPeter = user?.role !== 'suzanne'
+  const isPeter = user?.role === 'peter'
 
   return (
     <main className="creamPage appPage">
@@ -219,11 +266,17 @@ export function MiniBrainPage(): JSX.Element {
               width={dims.w}
               height={dims.h}
               nodeLabel={() => ''}
-              nodeCanvasObject={(node, ctx, scale) => drawMiniNode(node as BrainNodeView, ctx, scale, selected, matchedIds)}
+              nodeCanvasObject={(node, ctx, scale) =>
+                drawMiniNode(node as BrainNodeView, ctx, scale, selected, matchedIdsRef)
+              }
               onRenderFramePre={(ctx) => {
-                if (contractAnalysis && circleProgress > 0) drawContractCircle(ctx, dims.w, dims.h, circleProgress)
+                if (contractAnalysisRef.current && circleProgressRef.current > 0) {
+                  drawContractCircle(ctx, dims.w, dims.h, circleProgressRef.current)
+                }
               }}
-              linkCanvasObject={(link, ctx) => drawMiniLink(link as LinkObject<BrainNodeView, BrainEdgeView> & BrainEdgeView, ctx)}
+              linkCanvasObject={(link, ctx) =>
+                drawMiniLink(link as LinkObject<BrainNodeView, BrainEdgeView> & BrainEdgeView, ctx)
+              }
               linkCanvasObjectMode={() => 'replace'}
               backgroundColor="rgba(0,0,0,0)"
               onNodeHover={(node) => {
@@ -238,8 +291,8 @@ export function MiniBrainPage(): JSX.Element {
                 }
               }}
               onNodeClick={(node) => handleNodeClick(node as BrainNodeView)}
-              onBackgroundClick={() => setSelected(null)}
-              cooldownTicks={160}
+              onBackgroundClick={() => { setSelected(null); setCitation(null) }}
+              cooldownTicks={Infinity}
               d3AlphaDecay={0.012}
               d3VelocityDecay={0.22}
               autoPauseRedraw={false}
@@ -254,10 +307,10 @@ export function MiniBrainPage(): JSX.Element {
                 return l.relationship === 'playbook_hierarchy' ? 'rgba(0,153,153,.4)' : 'rgba(155,111,67,.4)'
               }}
             />
-
           </div>
 
           <aside className="clauseInspector">
+            {/* Stats row */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 4 }}>
               {[
                 { label: 'Clauses', value: clauseCount },
@@ -272,11 +325,73 @@ export function MiniBrainPage(): JSX.Element {
               ))}
             </div>
 
-            {/* Node inspector */}
-            {selected && (
+            {/* Citation card — shown when a matched node is clicked */}
+            {citation && (
+              <div className="citationCard pageEnter" style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', marginBottom: 8 }}>
+                <div style={{
+                  background: `${NODE_TYPE_COLORS[selected?.node_type ?? 'clause']}12`,
+                  borderLeft: `3px solid ${NODE_TYPE_COLORS[selected?.node_type ?? 'clause']}`,
+                  padding: '10px 12px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                }}>
+                  <div>
+                    <p className="panelKicker" style={{ color: NODE_TYPE_COLORS[selected?.node_type ?? 'clause'], marginBottom: 2 }}>
+                      {selected?.node_type?.replace(/_/g, ' ')} · contract match
+                    </p>
+                    <strong style={{ fontSize: 13 }}>{selected?.label}</strong>
+                  </div>
+                  <button type="button" onClick={() => setCitation(null)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 0, flexShrink: 0 }}>
+                    <X size={13} />
+                  </button>
+                </div>
+                <div style={{ padding: '10px 12px', display: 'grid', gap: 8 }}>
+                  {citation.segmented_clause?.text && (
+                    <blockquote style={{
+                      margin: 0, borderLeft: '3px solid rgba(47,42,34,.3)',
+                      paddingLeft: 10, fontStyle: 'italic', fontSize: 12,
+                      color: 'var(--ink)', lineHeight: 1.55,
+                    }}>
+                      "{citation.segmented_clause.text.slice(0, 260)}{citation.segmented_clause.text.length > 260 ? '…' : ''}"
+                    </blockquote>
+                  )}
+                  {citation.match?.explanation && (
+                    <p style={{ margin: 0, fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.5 }}>
+                      {citation.match.explanation.slice(0, 180)}
+                    </p>
+                  )}
+                  {citation.match && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{
+                        flex: 1, height: 5, borderRadius: 999, background: 'rgba(47,42,34,.1)', overflow: 'hidden'
+                      }}>
+                        <div style={{
+                          height: '100%', borderRadius: 999,
+                          width: `${Math.round(citation.match.score_breakdown.final_score * 100)}%`,
+                          background: 'var(--turquoise)',
+                        }} />
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--turquoise)', whiteSpace: 'nowrap' }}>
+                        {Math.round(citation.match.score_breakdown.final_score * 100)}% match
+                      </span>
+                    </div>
+                  )}
+                  {selected?.text && (
+                    <p style={{ margin: 0, fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>
+                      Playbook position: {selected.text.slice(0, 120)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Regular node inspector */}
+            {selected && !citation && (
               <div className="megaBrainNodeCard">
                 <p className="panelKicker" style={{ color: NODE_TYPE_COLORS[selected.node_type] }}>
-                  {selected.node_type.replace('_', ' ')}
+                  {selected.node_type.replace(/_/g, ' ')}
                 </p>
                 <h3>{selected.label}</h3>
                 <p>{(selected.text || selected.clause?.preferred_position || '').slice(0, 200)}</p>
@@ -290,6 +405,87 @@ export function MiniBrainPage(): JSX.Element {
                 </p>
               </div>
             )}
+
+            {/* Contract upload — all roles */}
+            <section style={{ borderTop: '1px solid rgba(47,42,34,.1)', paddingTop: 12, marginTop: 4 }}>
+              <p className="panelKicker">Contract check</p>
+              <input
+                ref={contractFileRef}
+                type="file"
+                accept=".pdf,.docx,.doc,.txt"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) void uploadContract(f)
+                  e.target.value = ''
+                }}
+              />
+              {contractAnalysis ? (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{ fontSize: 11, color: 'var(--turquoise)', fontWeight: 600 }}>
+                      {matchedIds.size} matched · {contractAnalysis.clauses.length} total sections
+                    </span>
+                    <button type="button" onClick={dismissContract}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 0 }}>
+                      <X size={13} />
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', height: 6, borderRadius: 999, overflow: 'hidden', gap: 1 }}>
+                    {contractAnalysis.risk_heatmap.preferred_count > 0 && <div style={{ flex: contractAnalysis.risk_heatmap.preferred_count, background: '#007c79' }} />}
+                    {contractAnalysis.risk_heatmap.fallback_count > 0 && <div style={{ flex: contractAnalysis.risk_heatmap.fallback_count, background: '#9b6f43' }} />}
+                    {contractAnalysis.risk_heatmap.redline_count > 0 && <div style={{ flex: contractAnalysis.risk_heatmap.redline_count, background: '#4a2430' }} />}
+                    {contractAnalysis.risk_heatmap.unmapped_count > 0 && <div style={{ flex: contractAnalysis.risk_heatmap.unmapped_count, background: 'rgba(47,42,34,.18)' }} />}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginTop: 8 }}>
+                    {[
+                      { label: 'Preferred', v: contractAnalysis.risk_heatmap.preferred_count, c: '#007c79' },
+                      { label: 'Fallback', v: contractAnalysis.risk_heatmap.fallback_count, c: '#9b6f43' },
+                      { label: 'Red line', v: contractAnalysis.risk_heatmap.redline_count, c: '#4a2430' },
+                      { label: 'Unmapped', v: contractAnalysis.risk_heatmap.unmapped_count, c: 'var(--muted)' },
+                    ].map(s => (
+                      <div key={s.label} style={{ textAlign: 'center' }}>
+                        <strong style={{ display: 'block', fontSize: 16, color: s.c }}>{s.v}</strong>
+                        <small style={{ fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em' }}>{s.label}</small>
+                      </div>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: 11, color: 'var(--muted)', margin: '8px 0 6px' }}>
+                    Click highlighted nodes on the brain to see exact citations.
+                  </p>
+                  <button
+                    className="secondaryAction drawerWide"
+                    type="button"
+                    onClick={() => contractFileRef.current?.click()}
+                  >
+                    <Upload size={13} /> Replace contract
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize: 11, color: 'var(--muted)', margin: '0 0 8px' }}>
+                    Upload a contract to overlay it on the brain and see which clauses are covered.
+                  </p>
+                  <button
+                    className="secondaryAction drawerWide"
+                    type="button"
+                    disabled={uploading}
+                    onClick={() => contractFileRef.current?.click()}
+                  >
+                    <Upload size={13} />
+                    {uploading ? 'Analysing…' : 'Upload contract'}
+                  </button>
+                  {uploading && (
+                    <div className="uploadProgressWrap" style={{ marginTop: 8 }}>
+                      <div className="uploadProgressBar" style={{ width: '100%' }} />
+                    </div>
+                  )}
+                </>
+              )}
+              {message && !isPeter && (
+                <p style={{ fontSize: 11, marginTop: 8, color: isSuccess ? 'var(--turquoise)' : 'var(--risk)' }}>{message}</p>
+              )}
+            </section>
 
             {/* Publish flow — Peter only */}
             {isPeter && (
@@ -329,90 +525,12 @@ export function MiniBrainPage(): JSX.Element {
                   {publishing ? 'Pushing…' : 'Push to API'}
                 </button>
                 {message && (
-                  <p className={isSuccess ? 'pushSuccess' : ''} style={{ fontSize: 12, margin: 0 }}>
-                    {message}
-                  </p>
+                  <p className={isSuccess ? 'pushSuccess' : ''} style={{ fontSize: 12, margin: 0 }}>{message}</p>
                 )}
               </section>
             )}
 
-            {/* Suzanne message flow */}
-            {!isPeter && message && (
-              <p className={isSuccess ? 'pushSuccess' : ''} style={{ fontSize: 12, margin: 0 }}>{message}</p>
-            )}
-
-            {/* Contract analysis — Peter only */}
-            {isPeter && (
-              <section style={{ borderTop: '1px solid rgba(47,42,34,.1)', paddingTop: 12, marginTop: 4 }}>
-                <p className="panelKicker">Contract check</p>
-                <input
-                  ref={contractFileRef}
-                  type="file"
-                  accept=".pdf,.docx,.doc,.txt"
-                  style={{ display: 'none' }}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0]
-                    if (f) void uploadContract(f)
-                    e.target.value = ''
-                  }}
-                />
-                {contractAnalysis ? (
-                  <>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                      <span style={{ fontSize: 11, color: 'var(--turquoise)', fontWeight: 600 }}>
-                        {contractAnalysis.clauses.length} sections analysed
-                      </span>
-                      <button
-                        type="button"
-                        onClick={dismissContract}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 0 }}
-                      >
-                        <X size={13} />
-                      </button>
-                    </div>
-                    <div style={{ display: 'flex', height: 6, borderRadius: 999, overflow: 'hidden', gap: 1 }}>
-                      {contractAnalysis.risk_heatmap.preferred_count > 0 && <div style={{ flex: contractAnalysis.risk_heatmap.preferred_count, background: '#007c79' }} />}
-                      {contractAnalysis.risk_heatmap.fallback_count > 0 && <div style={{ flex: contractAnalysis.risk_heatmap.fallback_count, background: '#9b6f43' }} />}
-                      {contractAnalysis.risk_heatmap.redline_count > 0 && <div style={{ flex: contractAnalysis.risk_heatmap.redline_count, background: '#4a2430' }} />}
-                      {contractAnalysis.risk_heatmap.unmapped_count > 0 && <div style={{ flex: contractAnalysis.risk_heatmap.unmapped_count, background: 'rgba(47,42,34,.18)' }} />}
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginTop: 8 }}>
-                      {[
-                        { label: 'Preferred', v: contractAnalysis.risk_heatmap.preferred_count, c: '#007c79' },
-                        { label: 'Fallback', v: contractAnalysis.risk_heatmap.fallback_count, c: '#9b6f43' },
-                        { label: 'Red line', v: contractAnalysis.risk_heatmap.redline_count, c: '#4a2430' },
-                        { label: 'Unmapped', v: contractAnalysis.risk_heatmap.unmapped_count, c: 'var(--muted)' },
-                      ].map(s => (
-                        <div key={s.label} style={{ textAlign: 'center' }}>
-                          <strong style={{ display: 'block', fontSize: 16, color: s.c }}>{s.v}</strong>
-                          <small style={{ fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em' }}>{s.label}</small>
-                        </div>
-                      ))}
-                    </div>
-                    <button
-                      className="secondaryAction drawerWide"
-                      type="button"
-                      style={{ marginTop: 10 }}
-                      onClick={() => contractFileRef.current?.click()}
-                    >
-                      <Upload size={13} />
-                      Replace contract
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    className="secondaryAction drawerWide"
-                    type="button"
-                    disabled={uploading}
-                    onClick={() => contractFileRef.current?.click()}
-                  >
-                    <Upload size={13} />
-                    {uploading ? 'Analysing…' : 'Upload contract'}
-                  </button>
-                )}
-              </section>
-            )}
-
+            {/* Legend */}
             <section>
               <p className="panelKicker">Legend</p>
               <div className="megaBrainLegend">
@@ -447,6 +565,7 @@ function drawContractCircle(ctx: CanvasRenderingContext2D, w: number, h: number,
   const cx = w / 2
   const cy = h / 2
   const R = Math.min(w, h) * 0.41
+  // Glow halo
   const glowGrad = ctx.createRadialGradient(cx, cy, R - 30, cx, cy, R + 30)
   glowGrad.addColorStop(0, 'rgba(20,15,10,0)')
   glowGrad.addColorStop(0.5, `rgba(20,15,10,${0.07 * progress})`)
@@ -456,21 +575,23 @@ function drawContractCircle(ctx: CanvasRenderingContext2D, w: number, h: number,
   ctx.strokeStyle = glowGrad
   ctx.lineWidth = 60
   ctx.stroke()
+  // Dashed arc drawing proportional to progress
   ctx.save()
   ctx.beginPath()
   ctx.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress)
-  ctx.strokeStyle = `rgba(20,15,10,${0.7 * progress})`
-  ctx.lineWidth = 2
+  ctx.strokeStyle = `rgba(20,15,10,${0.75 * progress})`
+  ctx.lineWidth = 2.5
   ctx.setLineDash([12, 6])
   ctx.stroke()
   ctx.setLineDash([])
   ctx.restore()
-  if (progress > 0.94) {
+  // Label fades in at end
+  if (progress > 0.9) {
     ctx.font = '10px Inter, sans-serif'
-    ctx.fillStyle = `rgba(20,15,10,${(progress - 0.94) * 16})`
+    ctx.fillStyle = `rgba(20,15,10,${Math.min(1, (progress - 0.9) * 10)})`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText('CONTRACT BOUNDARY', cx, cy - R - 16)
+    ctx.fillText('CONTRACT BOUNDARY', cx, cy - R - 18)
   }
 }
 
@@ -479,18 +600,18 @@ function drawMiniNode(
   ctx: CanvasRenderingContext2D,
   scale: number,
   selected: BrainNodeView | null,
-  matchedIds: Set<string>,
+  matchedIdsRef: React.MutableRefObject<Set<string>>,
 ): void {
   const x = node.x ?? 0
   const y = node.y ?? 0
   const isClause = node.node_type === 'clause'
-  const isMatched = matchedIds.has(node.id) || matchedIds.has(node.clause?.clause_id ?? '')
+  const isMatched = matchedIdsRef.current.has(node.id) || matchedIdsRef.current.has(node.clause?.clause_id ?? '')
   const isSelected = selected?.id === node.id
 
   const radius = NODE_TYPE_SIZE[node.node_type] ?? 4.5
   const color = NODE_TYPE_COLORS[node.node_type] ?? '#007c79'
 
-  // Issue/warning pulse ring for clause nodes
+  // Issue/warning pulse ring
   if (isClause && node.status !== 'clean') {
     const ringAlpha = 0.18 + 0.10 * Math.sin(Date.now() / 600)
     ctx.beginPath()
@@ -515,7 +636,7 @@ function drawMiniNode(
   if (isSelected) {
     ctx.beginPath()
     ctx.arc(x, y, radius + 4, 0, Math.PI * 2)
-    ctx.strokeStyle = 'rgba(0,153,153,.7)'
+    ctx.strokeStyle = isMatched ? 'rgba(0,153,153,.9)' : 'rgba(0,153,153,.7)'
     ctx.lineWidth = 1.8 / scale
     ctx.stroke()
   }
@@ -555,7 +676,6 @@ function drawMiniLink(
     ctx.setLineDash([3, 5])
   } else if (isHierarchy) {
     ctx.strokeStyle = 'rgba(47,42,34,.22)'
-    ctx.lineWidth = 1.5
   } else {
     ctx.strokeStyle = 'rgba(47,42,34,.14)'
   }

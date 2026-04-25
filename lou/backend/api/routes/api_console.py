@@ -207,8 +207,20 @@ def _published_playbook(playbook_id: str):
     return view
 
 
+def _playbook_for_analysis(playbook_id: str):
+    """Accept any playbook that has clauses — published or not — so contract
+    analysis works during the review/testing workflow before publishing."""
+    view = _load_playbook_view(playbook_id)
+    if not view.clauses:
+        raise HTTPException(
+            status_code=422,
+            detail="Playbook has no clauses yet. Run analysis first.",
+        )
+    return view
+
+
 async def _analyze_segmented_contract(playbook_id: str, segmented) -> AnalyzeContractResponse:
-    playbook = _published_playbook(playbook_id)
+    playbook = _playbook_for_analysis(playbook_id)
     analyzed: list[AnalyzedContractClause] = []
     heatmap = ContractRiskHeatmap()
     explanations: list[str] = []
