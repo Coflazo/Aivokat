@@ -1,506 +1,417 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import {
-  ArrowDownToLine,
-  Check,
-  ClipboardCheck,
-  FileUp,
-  GitCommit,
-  MessageSquare,
-  Network,
-  Search,
-  ShieldCheck,
-  X
-} from 'lucide-react'
+import ForceGraph2D, {
+  type ForceGraphMethods,
+  type GraphData,
+  type LinkObject,
+  type NodeObject
+} from 'react-force-graph-2d'
 import './styles.css'
 
-type Screen = 'map' | 'chat' | 'history' | 'review'
-type RuleType = 'standard' | 'fallback' | 'red_line' | 'escalation'
-type ChangeType = 'initial' | 'confirms' | 'contradicts' | 'extends' | 'new_rule'
+type PositionKind = 'preferred' | 'fallback' | 'negative'
+type BrainKind = PositionKind | 'topic'
 
-interface Rule {
+interface PlaybookRow {
   id: string
-  topic: string
-  category: string
-  type: RuleType
-  confidence: number
-  x: number
-  y: number
-  standard: string
-  fallback?: string
-  redLine?: string
-  reasoning: string
-  sources: string[]
-  version: number
-  updatedBy: string
-}
-
-interface Commit {
-  id: string
-  type: ChangeType
-  topic: string
-  by: string
-  time: string
-  source: string
-  oldText?: string
-  newText: string
-  note?: string
-}
-
-interface ReviewItem {
-  id: string
-  type: ChangeType
-  topic: string
-  confidence: number
-  source: string
   clause: string
-  reasoning: string
-  current: string
-  proposed: string
+  why: string
+  preferred: string
+  fallbacks: string[]
+  redLine: string
+  escalation: string
 }
 
-const rules: Rule[] = [
-  {
-    id: 'liability_cap',
-    topic: 'Liability Cap',
-    category: 'Financial Risk',
-    type: 'red_line',
-    confidence: 0.94,
-    x: 330,
-    y: 145,
-    standard: 'Liability should be capped at fees paid or payable under the agreement.',
-    fallback: 'A higher cap may be accepted for low-risk deals after legal approval.',
-    redLine: 'Unlimited liability is not accepted.',
-    reasoning: 'This prevents a routine NDA from creating open-ended financial exposure.',
-    sources: ['Sample NDA Playbook.docx', 'Sample Standard NDA.docx'],
-    version: 3,
-    updatedBy: 'Maria Legal'
-  },
-  {
-    id: 'confidentiality_duration',
-    topic: 'Confidentiality Duration',
-    category: 'Confidentiality',
-    type: 'standard',
-    confidence: 0.89,
-    x: 510,
-    y: 210,
-    standard: 'Confidentiality obligations should last five years after disclosure.',
-    fallback: 'Three years is acceptable for non-sensitive commercial information.',
-    redLine: 'Perpetual obligations should be limited to trade secrets only.',
-    reasoning: 'The term should protect sensitive information without creating broad permanent duties.',
-    sources: ['Sample NDA Playbook.csv.xlsx'],
-    version: 2,
-    updatedBy: 'Lou (AI)'
-  },
-  {
-    id: 'ip_ownership',
-    topic: 'IP Ownership',
-    category: 'IP & Data',
-    type: 'standard',
-    confidence: 0.91,
-    x: 410,
-    y: 325,
-    standard: 'Each party keeps ownership of its pre-existing intellectual property.',
-    fallback: 'Limited use rights can be granted only for the NDA purpose.',
-    reasoning: 'This avoids accidental transfer of Siemens technology or background rights.',
-    sources: ['Sample Standard NDA.docx'],
-    version: 1,
-    updatedBy: 'Anika Counsel'
-  },
-  {
-    id: 'governing_law',
-    topic: 'Governing Law',
-    category: 'Governance',
-    type: 'fallback',
-    confidence: 0.78,
-    x: 205,
-    y: 280,
-    standard: 'German law is preferred for Siemens templates.',
-    fallback: 'Neutral EU jurisdictions may be accepted after review.',
-    redLine: 'Unfamiliar high-risk jurisdictions require escalation.',
-    reasoning: 'Known governing law reduces uncertainty and review effort.',
-    sources: ['Sample NDA Playbook.docx'],
-    version: 2,
-    updatedBy: 'Maria Legal'
-  },
-  {
-    id: 'data_exports',
-    topic: 'Data Exports',
-    category: 'IP & Data',
-    type: 'escalation',
-    confidence: 0.83,
-    x: 625,
-    y: 345,
-    standard: 'Personal data exports require privacy review before acceptance.',
-    fallback: 'Aggregated non-personal data may be shared for the NDA purpose.',
-    reasoning: 'Cross-border data handling can trigger privacy and regulatory obligations.',
-    sources: ['Negotiated NDA - Supplier A.pdf'],
-    version: 1,
-    updatedBy: 'Lou (AI)'
-  }
-]
-
-const initialCommits: Commit[] = [
-  {
-    id: 'c1',
-    type: 'initial',
-    topic: 'Liability Cap',
-    by: 'Maria Legal',
-    time: 'Today, 09:18',
-    source: 'Sample NDA Playbook.docx',
-    newText: 'Created rule: unlimited liability is a red line.'
-  },
-  {
-    id: 'c2',
-    type: 'contradicts',
-    topic: 'Confidentiality Duration',
-    by: 'Jonas Counsel',
-    time: 'Today, 10:04',
-    source: 'Negotiated NDA - Supplier A.pdf',
-    oldText: 'Five-year confidentiality period.',
-    newText: 'Supplier requested perpetual confidentiality for all information.',
-    note: 'Rejected broad perpetual term; acceptable only for trade secrets.'
-  },
-  {
-    id: 'c3',
-    type: 'extends',
-    topic: 'Data Exports',
-    by: 'Lou (AI)',
-    time: 'Today, 10:21',
-    source: 'Negotiated NDA - Supplier B.pdf',
-    newText: 'New escalation guidance proposed for cross-border personal data sharing.'
-  }
-]
-
-const initialReview: ReviewItem[] = [
-  {
-    id: 'r1',
-    type: 'contradicts',
-    topic: 'Liability Cap',
-    confidence: 0.88,
-    source: 'Negotiated NDA - Supplier C.pdf',
-    clause: 'The parties agree that liability for all claims arising under this agreement shall be unlimited.',
-    reasoning: 'This clause conflicts with the active red line against unlimited liability.',
-    current: 'Unlimited liability is not accepted.',
-    proposed: 'Keep the existing red line and record this supplier clause as a contradiction.'
-  },
-  {
-    id: 'r2',
-    type: 'extends',
-    topic: 'Data Exports',
-    confidence: 0.72,
-    source: 'Negotiated NDA - Supplier D.pdf',
-    clause: 'Recipient may process evaluation data using approved affiliates located outside the European Economic Area.',
-    reasoning: 'The clause relates to data handling but adds a cross-border affiliate processing scenario.',
-    current: 'Personal data exports require privacy review before acceptance.',
-    proposed: 'Add affiliate processing outside the EEA as an explicit escalation trigger.'
-  }
-]
-
-const colors: Record<RuleType, string> = {
-  standard: '#009999',
-  fallback: '#EC6602',
-  red_line: '#D5001C',
-  escalation: '#4A2076'
+interface BrainNode {
+  id: string
+  label: string
+  kind: BrainKind
+  clause: string
+  detail: string
+  datasets: string[]
+  commits: string[]
+  x?: number
+  y?: number
+  val?: number
 }
 
-const changeLabels: Record<ChangeType, string> = {
-  initial: 'INITIAL',
-  confirms: 'CONFIRMS',
-  contradicts: 'CONTRADICTS',
-  extends: 'EXTENDS',
-  new_rule: 'NEW RULE'
+interface BrainLink {
+  source: string
+  target: string
+  strength: number
+  kind: PositionKind
+}
+
+const playbookRows: PlaybookRow[] = [
+  {
+    id: 'nda_type',
+    clause: 'Type of NDA',
+    why: 'Determines if our info is protected',
+    preferred: 'Bilateral mutual NDA',
+    fallbacks: ['Mirror obligations in a unilateral NDA', 'Accept unilateral only if we are the sole disclosing party'],
+    redLine: 'Unilateral NDA where we are receiving party only',
+    escalation: 'Counterparty refuses bilateral and we will share information'
+  },
+  {
+    id: 'marking',
+    clause: 'Marking of Confidential Info',
+    why: "Controls scope of what's protected",
+    preferred: 'Information must be marked Confidential',
+    fallbacks: ['Marked or evidently confidential to a reasonable person', 'All information deemed confidential with a practical designation process'],
+    redLine: 'All information confidential with no marking mechanism',
+    escalation: 'Counterparty insists on all information being confidential with no exceptions'
+  },
+  {
+    id: 'exceptions',
+    clause: 'Exceptions to Confidentiality',
+    why: 'Protects against liability for information already known or independently created',
+    preferred: 'All four standard exceptions',
+    fallbacks: ['Three of four exceptions if missing one is low risk', 'Modified language if all four concepts are covered'],
+    redLine: 'Fewer than three exceptions',
+    escalation: 'Independently developed exception is missing and cannot be added'
+  },
+  {
+    id: 'recipients',
+    clause: 'Permitted Recipients',
+    why: 'Enables operational use with affiliates, advisors, and contractors',
+    preferred: 'Need-to-know sharing with equivalent NDA duties',
+    fallbacks: ['Employees and affiliates with prior notice', 'Employees and affiliates with prior consent'],
+    redLine: 'Sharing limited only to named individuals',
+    escalation: 'No sharing with affiliates or advisors under any circumstances'
+  },
+  {
+    id: 'backups',
+    clause: 'Return and Destruction',
+    why: 'Prevents technically impossible compliance obligations',
+    preferred: 'Return or destroy with backup and legal-retention exemptions',
+    fallbacks: ['Legal-retention exemption only', 'Certification with reasonable timeframe'],
+    redLine: 'Immediate destruction of all copies with no exemptions',
+    escalation: 'Counterparty requires destruction of backups with written certification'
+  },
+  {
+    id: 'correctness',
+    clause: 'Liability for Correctness',
+    why: 'Prevents warranty exposure at NDA stage',
+    preferred: 'As-is; no warranty or reliance liability',
+    fallbacks: ['No warranty', 'Limited warranty'],
+    redLine: 'Full warranty',
+    escalation: 'Accuracy warranties backed by indemnification'
+  },
+  {
+    id: 'penalty',
+    clause: 'Contractual Penalty',
+    why: 'Prevents disproportionate financial exposure for breach',
+    preferred: 'No penalty clause',
+    fallbacks: ['Penalty only with disclosing-party burden of proof', 'Proportionate cap for willful or grossly negligent breach'],
+    redLine: 'Uncapped penalty regardless of fault',
+    escalation: 'Any contractual penalty clause needs senior legal review'
+  },
+  {
+    id: 'indemnity',
+    clause: 'Indemnification',
+    why: 'Controls financial exposure framework',
+    preferred: 'No indemnification clause',
+    fallbacks: ['Reasonable limitation of liability applying equally', 'Direct-damages indemnity with reasonable cap'],
+    redLine: 'One-sided indemnity or punitive or consequential damages',
+    escalation: 'Any liability provision beyond standard statutory liability'
+  },
+  {
+    id: 'ip',
+    clause: 'IP Rights and Know-How',
+    why: 'Prevents unintended transfer of IP ownership or license grants',
+    preferred: 'No license or rights granted or implied',
+    fallbacks: ['No license; future IP handled separately', 'Each party keeps pre-existing IP'],
+    redLine: 'IP transfer, irrevocable license, or assignment',
+    escalation: 'Any IP assignment, license grant, or joint ownership clause'
+  },
+  {
+    id: 'term',
+    clause: 'Confidentiality Period',
+    why: 'Ensures manageable, defined obligations',
+    preferred: 'NDA term 2 to 3 years; confidentiality 5 years from disclosure',
+    fallbacks: ['Confidentiality period 3 to 7 years', 'Fixed survival after termination'],
+    redLine: 'Perpetual or indefinite confidentiality',
+    escalation: 'Perpetual confidentiality or period shorter than 3 years'
+  },
+  {
+    id: 'law',
+    clause: 'Choice of Law',
+    why: 'Determines interpretation and enforcement',
+    preferred: "Our own jurisdiction's law",
+    fallbacks: ['Neutral commercially sophisticated jurisdiction', "Counterparty law if balanced and commercially established"],
+    redLine: 'Unpredictable legal system',
+    escalation: 'Law outside our country of incorporation or primary place of business'
+  },
+  {
+    id: 'disputes',
+    clause: 'Dispute Resolution',
+    why: 'Protects confidentiality of proceedings',
+    preferred: 'International arbitration with neutral seat and English language',
+    fallbacks: ['Recognized institutional arbitration rules', 'Neutral ordinary courts with confidential treatment'],
+    redLine: "Exclusive counterparty local courts with no arbitration option",
+    escalation: "Ordinary courts in counterparty's jurisdiction with no alternative"
+  },
+  {
+    id: 'signatures',
+    clause: 'Signatures and Authority',
+    why: 'Ensures the NDA is binding and enforceable',
+    preferred: 'Duly authorized representatives',
+    fallbacks: ['Established e-signature platform with authority confirmation', 'Single signatory with evidence of authority'],
+    redLine: "Counterparty signatory authority cannot be verified",
+    escalation: "Any doubt about counterparty signatory authority"
+  }
+]
+
+const kindColors: Record<BrainKind, string> = {
+  topic: '#2f2a22',
+  preferred: '#007c79',
+  fallback: '#9b6f43',
+  negative: '#4a2430'
+}
+
+function buildBrainData(): GraphData<BrainNode, BrainLink> {
+  const nodes: BrainNode[] = []
+  const links: BrainLink[] = []
+  const centerX = 0
+  const centerY = 0
+
+  playbookRows.forEach((row: PlaybookRow, index: number) => {
+    const side = index % 2 === 0 ? -1 : 1
+    const lane = Math.floor(index / 2)
+    const angle = -1.22 + lane * 0.38
+    const topicX = centerX + side * (145 + Math.sin(lane) * 32)
+    const topicY = centerY + Math.sin(angle) * 185 + Math.cos(index * 0.7) * 16
+    const topicId = `topic_${row.id}`
+
+    nodes.push({
+      id: topicId,
+      label: row.clause,
+      kind: 'topic',
+      clause: row.clause,
+      detail: row.why,
+      datasets: ['Sample NDA Playbook.csv.xlsx'],
+      commits: [
+        `Initial extraction: ${row.clause}`,
+        'Mapped playbook row into preferred, fallback, and risk positions'
+      ],
+      x: topicX,
+      y: topicY,
+      val: 6
+    })
+
+    const preferredId = `${row.id}_preferred`
+    nodes.push({
+      id: preferredId,
+      label: 'Preferred',
+      kind: 'preferred',
+      clause: row.clause,
+      detail: row.preferred,
+      datasets: ['Sample NDA Playbook.csv.xlsx'],
+      commits: [
+        'Preferred position committed from source playbook',
+        'No lawyer override recorded'
+      ],
+      x: topicX + side * 58,
+      y: topicY - 34,
+      val: 3.2
+    })
+    links.push({ source: topicId, target: preferredId, strength: 1, kind: 'preferred' })
+
+    row.fallbacks.forEach((fallback: string, fallbackIndex: number) => {
+      const fallbackId = `${row.id}_fallback_${fallbackIndex + 1}`
+      nodes.push({
+        id: fallbackId,
+        label: `Fallback ${fallbackIndex + 1}`,
+        kind: 'fallback',
+        clause: row.clause,
+        detail: fallback,
+        datasets: ['Sample NDA Playbook.csv.xlsx'],
+        commits: [
+          `Fallback ${fallbackIndex + 1} committed from source playbook`,
+          'Available only when negotiation pressure justifies deviation'
+        ],
+        x: topicX + side * (78 + fallbackIndex * 24),
+        y: topicY + 10 + fallbackIndex * 32,
+        val: 2.5
+      })
+      links.push({ source: topicId, target: fallbackId, strength: 0.72, kind: 'fallback' })
+      links.push({ source: preferredId, target: fallbackId, strength: 0.28, kind: 'fallback' })
+    })
+
+    const negativeId = `${row.id}_negative`
+    nodes.push({
+      id: negativeId,
+      label: 'Red line + escalation',
+      kind: 'negative',
+      clause: row.clause,
+      detail: `${row.redLine}. Escalate: ${row.escalation}.`,
+      datasets: ['Sample NDA Playbook.csv.xlsx'],
+      commits: [
+        'Risk boundary committed from red-line and escalation columns',
+        'Requires lawyer approval before changing'
+      ],
+      x: topicX - side * 36,
+      y: topicY + 48,
+      val: 3
+    })
+    links.push({ source: topicId, target: negativeId, strength: 0.86, kind: 'negative' })
+  })
+
+  return { nodes, links }
+}
+
+function useWindowSize(): { width: number; height: number } {
+  const [size, setSize] = React.useState<{ width: number; height: number }>({
+    width: window.innerWidth,
+    height: window.innerHeight
+  })
+
+  React.useEffect(() => {
+    function handleResize(): void {
+      setSize({ width: window.innerWidth, height: window.innerHeight })
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  return size
 }
 
 function App(): JSX.Element {
-  const [screen, setScreen] = React.useState<Screen>('map')
-  const [selectedRule, setSelectedRule] = React.useState<Rule>(rules[0])
-  const [reviewItems, setReviewItems] = React.useState<ReviewItem[]>(initialReview)
-  const [commits, setCommits] = React.useState<Commit[]>(initialCommits)
-  const [toast, setToast] = React.useState<string>('')
+  const graphRef = React.useRef<ForceGraphMethods<BrainNode, BrainLink>>()
+  const size = useWindowSize()
+  const graphData = React.useMemo<GraphData<BrainNode, BrainLink>>(() => buildBrainData(), [])
 
-  function resolveReview(item: ReviewItem, approved: boolean): void {
-    setReviewItems((current) => current.filter((candidate) => candidate.id !== item.id))
-    setCommits((current) => [
-      {
-        id: `c-${Date.now()}`,
-        type: item.type,
-        topic: item.topic,
-        by: 'Demo Lawyer',
-        time: 'Just now',
-        source: item.source,
-        oldText: item.current,
-        newText: approved ? item.proposed : 'Proposal rejected. Active rule unchanged.',
-        note: approved ? 'Approved from review queue.' : 'Rejected from review queue.'
-      },
-      ...current
-    ])
-    setToast(approved ? 'Approved. Commit created.' : 'Rejected. Audit entry recorded.')
-    window.setTimeout(() => setToast(''), 2600)
+  React.useEffect(() => {
+    const graph = graphRef.current
+    if (!graph) return
+
+    graph.d3Force('charge')?.strength?.(-58)
+    graph.d3Force('link')?.distance?.((link: LinkObject<BrainNode, BrainLink>) => {
+      const typedLink = link as LinkObject<BrainNode, BrainLink> & BrainLink
+      return typedLink.kind === 'negative' ? 76 : typedLink.kind === 'fallback' ? 58 : 48
+    })
+    graph.zoomToFit(900, 72)
+
+    const reheater = window.setInterval(() => {
+      graph.d3ReheatSimulation()
+    }, 2400)
+
+    return () => window.clearInterval(reheater)
+  }, [])
+
+  function drawNode(node: NodeObject<BrainNode>, ctx: CanvasRenderingContext2D, globalScale: number): void {
+    const typedNode = node as NodeObject<BrainNode> & BrainNode
+    const x = typedNode.x ?? 0
+    const y = typedNode.y ?? 0
+    const radius = typedNode.kind === 'topic' ? 5.4 : typedNode.kind === 'preferred' ? 3.7 : 3.1
+    const labelFontSize = typedNode.kind === 'topic' ? 10 / globalScale : 8 / globalScale
+    const shouldLabel = typedNode.kind === 'topic' || globalScale > 1.35
+
+    ctx.beginPath()
+    ctx.arc(x, y, radius, 0, Math.PI * 2)
+    ctx.fillStyle = kindColors[typedNode.kind]
+    ctx.globalAlpha = typedNode.kind === 'topic' ? 0.92 : 0.72
+    ctx.fill()
+
+    ctx.beginPath()
+    ctx.arc(x, y, radius + 4.5, 0, Math.PI * 2)
+    ctx.strokeStyle = kindColors[typedNode.kind]
+    ctx.globalAlpha = typedNode.kind === 'topic' ? 0.12 : 0.08
+    ctx.lineWidth = 1.2 / globalScale
+    ctx.stroke()
+    ctx.globalAlpha = 1
+
+    if (!shouldLabel) return
+
+    ctx.font = `${labelFontSize}px Inter, sans-serif`
+    ctx.fillStyle = typedNode.kind === 'topic' ? '#31291f' : '#756b5f'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.fillText(typedNode.label, x, y + radius + 5 / globalScale)
+  }
+
+  function drawLink(
+    link: LinkObject<NodeObject<BrainNode>, LinkObject<BrainNode, BrainLink>>,
+    ctx: CanvasRenderingContext2D
+  ): void {
+    const typedLink = link as LinkObject<BrainNode, BrainLink> & BrainLink
+    const source = typedLink.source as NodeObject<BrainNode>
+    const target = typedLink.target as NodeObject<BrainNode>
+    if (typeof source !== 'object' || typeof target !== 'object') return
+
+    ctx.beginPath()
+    ctx.moveTo(source.x ?? 0, source.y ?? 0)
+    ctx.lineTo(target.x ?? 0, target.y ?? 0)
+    ctx.strokeStyle = typedLink.kind === 'negative' ? 'rgba(74, 36, 48, .18)' : 'rgba(87, 74, 58, .16)'
+    ctx.lineWidth = typedLink.kind === 'preferred' ? 1.15 : 0.75
+    ctx.stroke()
   }
 
   return (
-    <div className="app">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brandMark">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Siemens-logo.svg/1280px-Siemens-logo.svg.png" alt="Siemens" />
-          </div>
-          <div>
-            <strong>Lou</strong>
-            <span>Playbook Engine</span>
-          </div>
-        </div>
-        <nav>
-          <NavButton icon={<Network size={18} />} active={screen === 'map'} label="Map" onClick={() => setScreen('map')} />
-          <NavButton icon={<MessageSquare size={18} />} active={screen === 'chat'} label="Chat" onClick={() => setScreen('chat')} />
-          <NavButton icon={<GitCommit size={18} />} active={screen === 'history'} label="History" onClick={() => setScreen('history')} />
-          <NavButton
-            icon={<ClipboardCheck size={18} />}
-            active={screen === 'review'}
-            label="Review"
-            count={reviewItems.length}
-            onClick={() => setScreen('review')}
-          />
-        </nav>
-        <div className="sidebarStatus">
-          <ShieldCheck size={16} />
-          Lawyer approval required for every update
-        </div>
-      </aside>
-
-      <main className="workspace">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">Siemens hackathon prototype</p>
-            <h1>{screenTitle(screen)}</h1>
-          </div>
-          <div className="actions">
-            <button className="ghostButton"><FileUp size={16} /> Upload Playbook</button>
-            <button className="primaryButton"><ArrowDownToLine size={16} /> Export Excel</button>
-          </div>
-        </header>
-
-        {screen === 'map' && <NeuralMap selectedRule={selectedRule} onSelect={setSelectedRule} />}
-        {screen === 'chat' && <Chat onSelectRule={(rule) => { setSelectedRule(rule); setScreen('map') }} />}
-        {screen === 'history' && <History commits={commits} />}
-        {screen === 'review' && <ReviewQueue items={reviewItems} onResolve={resolveReview} />}
-      </main>
-
-      {screen === 'map' && <RuleDrawer rule={selectedRule} />}
-      {toast && <div className="toast">{toast}</div>}
-    </div>
-  )
-}
-
-function screenTitle(screen: Screen): string {
-  const titles: Record<Screen, string> = {
-    map: 'Neural Map',
-    chat: 'Chat with Lou',
-    history: 'Commit History',
-    review: 'Review Queue'
-  }
-  return titles[screen]
-}
-
-function NavButton(props: {
-  icon: React.ReactNode
-  label: string
-  active: boolean
-  count?: number
-  onClick: () => void
-}): JSX.Element {
-  return (
-    <button className={`navButton ${props.active ? 'active' : ''}`} onClick={props.onClick}>
-      {props.icon}
-      <span>{props.label}</span>
-      {typeof props.count === 'number' && props.count > 0 && <b>{props.count}</b>}
-    </button>
-  )
-}
-
-function NeuralMap(props: { selectedRule: Rule; onSelect: (rule: Rule) => void }): JSX.Element {
-  return (
-    <section className="mapScreen">
-      <div className="toolbar">
-        <label><Search size={15} /> Search topic</label>
-        <input placeholder="liability, IP, data..." />
-        <select aria-label="Category">
-          <option>All categories</option>
-          <option>Financial Risk</option>
-          <option>Confidentiality</option>
-          <option>IP & Data</option>
-        </select>
-        <div className="segmented">
-          <button>All</button>
-          <button>Standard</button>
-          <button>Fallback</button>
-          <button>Red Line</button>
-        </div>
+    <main className="creamPage">
+      <div className="brand">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Siemens-logo.svg/1280px-Siemens-logo.svg.png" alt="Siemens" />
+        <span>Lou</span>
       </div>
-      <div className="graphPanel">
-        <svg viewBox="0 0 760 450" role="img" aria-label="Legal playbook knowledge graph">
-          <line x1="330" y1="145" x2="510" y2="210" />
-          <line x1="330" y1="145" x2="205" y2="280" />
-          <line x1="510" y1="210" x2="625" y2="345" />
-          <line x1="410" y1="325" x2="625" y2="345" />
-          <line x1="410" y1="325" x2="205" y2="280" />
-          {rules.map((rule) => (
-            <g key={rule.id} className="node" onClick={() => props.onSelect(rule)}>
-              {props.selectedRule.id === rule.id && <circle cx={rule.x} cy={rule.y} r={22} className="selectedRing" />}
-              <circle cx={rule.x} cy={rule.y} r={14 + rule.confidence * 5} fill={colors[rule.type]} />
-              <text x={rule.x} y={rule.y + 42}>{rule.topic}</text>
-            </g>
-          ))}
-        </svg>
+      <div className="brainShell" aria-label="Lou playbook brain">
+        <ForceGraph2D<BrainNode, BrainLink>
+          ref={graphRef}
+          graphData={graphData}
+          width={size.width}
+          height={size.height}
+          backgroundColor="rgba(0,0,0,0)"
+          nodeId="id"
+          nodeVal={(node: NodeObject<BrainNode>) => node.val ?? 2}
+          nodeLabel={(node: NodeObject<BrainNode>) => {
+            const typedNode = node as NodeObject<BrainNode> & BrainNode
+            const datasets = typedNode.datasets.map((dataset: string) => `<li>${dataset}</li>`).join('')
+            const commits = typedNode.commits.map((commit: string) => `<li>${commit}</li>`).join('')
+            return `<div class="tip"><strong>${typedNode.clause}</strong><span>${typedNode.label}</span><p>${typedNode.detail}</p><em>Datasets</em><ul>${datasets}</ul><em>Commit comments</em><ul>${commits}</ul></div>`
+          }}
+          nodeCanvasObject={drawNode}
+          nodePointerAreaPaint={(node: NodeObject<BrainNode>, color: string, ctx: CanvasRenderingContext2D) => {
+            const typedNode = node as NodeObject<BrainNode> & BrainNode
+            ctx.fillStyle = color
+            ctx.beginPath()
+            ctx.arc(typedNode.x ?? 0, typedNode.y ?? 0, typedNode.kind === 'topic' ? 11 : 8, 0, Math.PI * 2)
+            ctx.fill()
+          }}
+          linkCanvasObject={drawLink}
+          linkCanvasObjectMode={() => 'replace'}
+          linkDirectionalParticles={(link: LinkObject<BrainNode, BrainLink>) => {
+            const typedLink = link as LinkObject<BrainNode, BrainLink> & BrainLink
+            return typedLink.kind === 'preferred' ? 2 : 1
+          }}
+          linkDirectionalParticleSpeed={(link: LinkObject<BrainNode, BrainLink>) => {
+            const typedLink = link as LinkObject<BrainNode, BrainLink> & BrainLink
+            return typedLink.kind === 'negative' ? 0.004 : 0.006
+          }}
+          linkDirectionalParticleWidth={(link: LinkObject<BrainNode, BrainLink>) => {
+            const typedLink = link as LinkObject<BrainNode, BrainLink> & BrainLink
+            return typedLink.kind === 'preferred' ? 1.8 : 1.2
+          }}
+          linkDirectionalParticleColor={(link: LinkObject<BrainNode, BrainLink>) => {
+            const typedLink = link as LinkObject<BrainNode, BrainLink> & BrainLink
+            return typedLink.kind === 'preferred' ? 'rgba(0, 121, 118, .52)' : 'rgba(74, 36, 48, .34)'
+          }}
+          autoPauseRedraw={false}
+          cooldownTicks={Infinity}
+          d3AlphaDecay={0.012}
+          d3VelocityDecay={0.18}
+          minZoom={0.58}
+          maxZoom={4.2}
+          enableNodeDrag
+          enablePanInteraction
+          enableZoomInteraction
+        />
       </div>
-    </section>
-  )
-}
-
-function RuleDrawer({ rule }: { rule: Rule }): JSX.Element {
-  return (
-    <aside className="drawer">
-      <div className="drawerHeader">
-        <div>
-          <p className="eyebrow">Rule detail</p>
-          <h2>{rule.topic}</h2>
-        </div>
-        <span className="version">v{rule.version}</span>
+      <div className="legend">
+        <span><i className="preferred" /> Preferred</span>
+        <span><i className="fallback" /> Fallback</span>
+        <span><i className="negative" /> Red line / escalation</span>
       </div>
-      <div className="badges">
-        <span>{rule.category}</span>
-        <span style={{ borderColor: colors[rule.type], color: colors[rule.type] }}>{rule.type.replace('_', ' ')}</span>
-      </div>
-      <RuleSection title="Standard Position" tone="teal" text={rule.standard} />
-      {rule.fallback && <RuleSection title="Fallback Position" tone="amber" text={rule.fallback} />}
-      {rule.redLine && <RuleSection title="Red Line" tone="red" text={rule.redLine} />}
-      <div className="reasoning">
-        <h3>Why this matters</h3>
-        <p>{rule.reasoning}</p>
-      </div>
-      <div className="confidence">
-        <div><span>Confidence</span><strong>{Math.round(rule.confidence * 100)}%</strong></div>
-        <i style={{ width: `${rule.confidence * 100}%` }} />
-      </div>
-      <div className="sources">
-        <h3>Sources</h3>
-        {rule.sources.map((source) => <span key={source}>{source}</span>)}
-      </div>
-      <p className="muted">Last updated by {rule.updatedBy}</p>
-    </aside>
-  )
-}
-
-function RuleSection({ title, text, tone }: { title: string; text: string; tone: 'teal' | 'amber' | 'red' }): JSX.Element {
-  return (
-    <section className={`ruleSection ${tone}`}>
-      <h3>{title}</h3>
-      <p>{text}</p>
-    </section>
-  )
-}
-
-function Chat({ onSelectRule }: { onSelectRule: (rule: Rule) => void }): JSX.Element {
-  const [asked, setAsked] = React.useState<boolean>(false)
-  return (
-    <section className="chatScreen">
-      <div className="promptChips">
-        {['Can we accept unlimited liability?', 'What is our IP ownership position?', 'When do we escalate data exports?'].map((prompt) => (
-          <button key={prompt} onClick={() => setAsked(true)}>{prompt}</button>
-        ))}
-      </div>
-      <div className="messages">
-        <div className="message user">Can we accept unlimited liability?</div>
-        <div className="message lou">
-          <p>No. The current playbook says unlimited liability is not accepted. It should be treated as a red line and escalated rather than accepted. [Rule: Liability Cap]</p>
-          <button className="sourceChip" onClick={() => onSelectRule(rules[0])}>Liability Cap · 94%</button>
-          <small>Based on 1 playbook rule</small>
-        </div>
-        {asked && (
-          <div className="message lou">
-            <p>The answer is grounded in the active playbook rule and its listed source documents. [Rule: Liability Cap]</p>
-            <button className="sourceChip" onClick={() => onSelectRule(rules[0])}>Liability Cap · 94%</button>
-          </div>
-        )}
-      </div>
-      <div className="chatInput">
-        <input placeholder="Ask Lou about the playbook..." />
-        <button className="primaryButton" onClick={() => setAsked(true)}>Send</button>
-      </div>
-    </section>
-  )
-}
-
-function History({ commits }: { commits: Commit[] }): JSX.Element {
-  return (
-    <section className="historyScreen">
-      <div className="toolbar">
-        <select><option>All change types</option></select>
-        <select><option>All lawyers</option></select>
-        <input type="date" />
-      </div>
-      <div className="timeline">
-        {commits.map((commit) => (
-          <article className="commitCard" key={commit.id}>
-            <div className="commitTop">
-              <span className={`changeBadge ${commit.type}`}>{changeLabels[commit.type]}</span>
-              <strong>{commit.topic}</strong>
-              <time>{commit.time}</time>
-            </div>
-            <p className="muted">Committed by {commit.by} from {commit.source}</p>
-            {commit.oldText && (
-              <div className="diff">
-                <p><del>{commit.oldText}</del></p>
-                <p><ins>{commit.newText}</ins></p>
-              </div>
-            )}
-            {!commit.oldText && <p>{commit.newText}</p>}
-            {commit.note && <blockquote>{commit.note}</blockquote>}
-          </article>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function ReviewQueue({ items, onResolve }: { items: ReviewItem[]; onResolve: (item: ReviewItem, approved: boolean) => void }): JSX.Element {
-  if (items.length === 0) {
-    return (
-      <section className="emptyState">
-        <ClipboardCheck size={34} />
-        <h2>The playbook is up to date.</h2>
-        <p>No proposed changes awaiting review.</p>
-      </section>
-    )
-  }
-
-  return (
-    <section className="reviewGrid">
-      {items.map((item) => (
-        <article className="reviewCard" key={item.id}>
-          <div className="reviewHeader">
-            <span className={`changeBadge ${item.type}`}>{changeLabels[item.type]}</span>
-            <h2>{item.topic}</h2>
-            <b>{Math.round(item.confidence * 100)}%</b>
-          </div>
-          <p className="muted">{item.source}</p>
-          <pre>{item.clause}</pre>
-          <h3>Lou's Reasoning</h3>
-          <p>{item.reasoning}</p>
-          <div className="diff">
-            <p>{item.current}</p>
-            <p>{item.proposed}</p>
-          </div>
-          <label className="noteLabel">Lawyer note</label>
-          <input placeholder="Optional note for audit trail" />
-          <div className="reviewActions">
-            <button className="rejectButton" onClick={() => onResolve(item, false)}><X size={16} /> Reject</button>
-            <button className="approveButton" onClick={() => onResolve(item, true)}><Check size={16} /> Approve</button>
-          </div>
-        </article>
-      ))}
-    </section>
+    </main>
   )
 }
 
