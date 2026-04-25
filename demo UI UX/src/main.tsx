@@ -6,6 +6,7 @@ import ForceGraph2D, {
   type LinkObject,
   type NodeObject
 } from 'react-force-graph-2d'
+import { sourcePlaybookRows, type SourcePlaybookRow } from './playbookData'
 import './styles.css'
 
 type PositionKind = 'preferred' | 'fallback' | 'negative'
@@ -19,6 +20,7 @@ interface PlaybookRow {
   fallbacks: string[]
   redLine: string
   escalation: string
+  sourceFile: string
 }
 
 interface BrainNode {
@@ -41,125 +43,16 @@ interface BrainLink {
   kind: PositionKind
 }
 
-const playbookRows: PlaybookRow[] = [
-  {
-    id: 'nda_type',
-    clause: 'Type of NDA',
-    why: 'Determines if our info is protected',
-    preferred: 'Bilateral mutual NDA',
-    fallbacks: ['Mirror obligations in a unilateral NDA', 'Accept unilateral only if we are the sole disclosing party'],
-    redLine: 'Unilateral NDA where we are receiving party only',
-    escalation: 'Counterparty refuses bilateral and we will share information'
-  },
-  {
-    id: 'marking',
-    clause: 'Marking of Confidential Info',
-    why: "Controls scope of what's protected",
-    preferred: 'Information must be marked Confidential',
-    fallbacks: ['Marked or evidently confidential to a reasonable person', 'All information deemed confidential with a practical designation process'],
-    redLine: 'All information confidential with no marking mechanism',
-    escalation: 'Counterparty insists on all information being confidential with no exceptions'
-  },
-  {
-    id: 'exceptions',
-    clause: 'Exceptions to Confidentiality',
-    why: 'Protects against liability for information already known or independently created',
-    preferred: 'All four standard exceptions',
-    fallbacks: ['Three of four exceptions if missing one is low risk', 'Modified language if all four concepts are covered'],
-    redLine: 'Fewer than three exceptions',
-    escalation: 'Independently developed exception is missing and cannot be added'
-  },
-  {
-    id: 'recipients',
-    clause: 'Permitted Recipients',
-    why: 'Enables operational use with affiliates, advisors, and contractors',
-    preferred: 'Need-to-know sharing with equivalent NDA duties',
-    fallbacks: ['Employees and affiliates with prior notice', 'Employees and affiliates with prior consent'],
-    redLine: 'Sharing limited only to named individuals',
-    escalation: 'No sharing with affiliates or advisors under any circumstances'
-  },
-  {
-    id: 'backups',
-    clause: 'Return and Destruction',
-    why: 'Prevents technically impossible compliance obligations',
-    preferred: 'Return or destroy with backup and legal-retention exemptions',
-    fallbacks: ['Legal-retention exemption only', 'Certification with reasonable timeframe'],
-    redLine: 'Immediate destruction of all copies with no exemptions',
-    escalation: 'Counterparty requires destruction of backups with written certification'
-  },
-  {
-    id: 'correctness',
-    clause: 'Liability for Correctness',
-    why: 'Prevents warranty exposure at NDA stage',
-    preferred: 'As-is; no warranty or reliance liability',
-    fallbacks: ['No warranty', 'Limited warranty'],
-    redLine: 'Full warranty',
-    escalation: 'Accuracy warranties backed by indemnification'
-  },
-  {
-    id: 'penalty',
-    clause: 'Contractual Penalty',
-    why: 'Prevents disproportionate financial exposure for breach',
-    preferred: 'No penalty clause',
-    fallbacks: ['Penalty only with disclosing-party burden of proof', 'Proportionate cap for willful or grossly negligent breach'],
-    redLine: 'Uncapped penalty regardless of fault',
-    escalation: 'Any contractual penalty clause needs senior legal review'
-  },
-  {
-    id: 'indemnity',
-    clause: 'Indemnification',
-    why: 'Controls financial exposure framework',
-    preferred: 'No indemnification clause',
-    fallbacks: ['Reasonable limitation of liability applying equally', 'Direct-damages indemnity with reasonable cap'],
-    redLine: 'One-sided indemnity or punitive or consequential damages',
-    escalation: 'Any liability provision beyond standard statutory liability'
-  },
-  {
-    id: 'ip',
-    clause: 'IP Rights and Know-How',
-    why: 'Prevents unintended transfer of IP ownership or license grants',
-    preferred: 'No license or rights granted or implied',
-    fallbacks: ['No license; future IP handled separately', 'Each party keeps pre-existing IP'],
-    redLine: 'IP transfer, irrevocable license, or assignment',
-    escalation: 'Any IP assignment, license grant, or joint ownership clause'
-  },
-  {
-    id: 'term',
-    clause: 'Confidentiality Period',
-    why: 'Ensures manageable, defined obligations',
-    preferred: 'NDA term 2 to 3 years; confidentiality 5 years from disclosure',
-    fallbacks: ['Confidentiality period 3 to 7 years', 'Fixed survival after termination'],
-    redLine: 'Perpetual or indefinite confidentiality',
-    escalation: 'Perpetual confidentiality or period shorter than 3 years'
-  },
-  {
-    id: 'law',
-    clause: 'Choice of Law',
-    why: 'Determines interpretation and enforcement',
-    preferred: "Our own jurisdiction's law",
-    fallbacks: ['Neutral commercially sophisticated jurisdiction', "Counterparty law if balanced and commercially established"],
-    redLine: 'Unpredictable legal system',
-    escalation: 'Law outside our country of incorporation or primary place of business'
-  },
-  {
-    id: 'disputes',
-    clause: 'Dispute Resolution',
-    why: 'Protects confidentiality of proceedings',
-    preferred: 'International arbitration with neutral seat and English language',
-    fallbacks: ['Recognized institutional arbitration rules', 'Neutral ordinary courts with confidential treatment'],
-    redLine: "Exclusive counterparty local courts with no arbitration option",
-    escalation: "Ordinary courts in counterparty's jurisdiction with no alternative"
-  },
-  {
-    id: 'signatures',
-    clause: 'Signatures and Authority',
-    why: 'Ensures the NDA is binding and enforceable',
-    preferred: 'Duly authorized representatives',
-    fallbacks: ['Established e-signature platform with authority confirmation', 'Single signatory with evidence of authority'],
-    redLine: "Counterparty signatory authority cannot be verified",
-    escalation: "Any doubt about counterparty signatory authority"
-  }
-]
+type SimNode = NodeObject<BrainNode> & BrainNode
+
+interface BrainBoundaryForce {
+  (alpha: number): void
+  initialize: (nodes: SimNode[]) => void
+}
+
+const BRAIN_RX = 330
+const BRAIN_RY = 218
+const playbookRows: PlaybookRow[] = sourcePlaybookRows.map((row: SourcePlaybookRow) => ({ ...row }))
 
 const kindColors: Record<BrainKind, string> = {
   topic: '#2f2a22',
@@ -168,19 +61,68 @@ const kindColors: Record<BrainKind, string> = {
   negative: '#4a2430'
 }
 
+function keepInsideBrain(x: number, y: number, padding = 0.88): { x: number; y: number } {
+  const rx = BRAIN_RX * padding
+  const ry = BRAIN_RY * padding
+  const distance = Math.sqrt((x * x) / (rx * rx) + (y * y) / (ry * ry))
+
+  if (distance <= 1) {
+    return { x, y }
+  }
+
+  return {
+    x: x / distance,
+    y: y / distance
+  }
+}
+
+function createBrainBoundaryForce(): BrainBoundaryForce {
+  let nodes: SimNode[] = []
+
+  const force = ((alpha: number): void => {
+    nodes.forEach((node: SimNode) => {
+      const x = node.x ?? 0
+      const y = node.y ?? 0
+
+      node.vx = (node.vx ?? 0) + -x * 0.018 * alpha
+      node.vy = (node.vy ?? 0) + -y * 0.022 * alpha
+
+      const rx = BRAIN_RX * 0.94
+      const ry = BRAIN_RY * 0.94
+      const distance = Math.sqrt((x * x) / (rx * rx) + (y * y) / (ry * ry))
+
+      if (distance > 1) {
+        node.x = x / distance
+        node.y = y / distance
+        node.vx = -(node.vx ?? 0) * 0.18
+        node.vy = -(node.vy ?? 0) * 0.18
+      }
+    })
+  }) as BrainBoundaryForce
+
+  force.initialize = (simulationNodes: SimNode[]): void => {
+    nodes = simulationNodes
+  }
+
+  return force
+}
+
 function buildBrainData(): GraphData<BrainNode, BrainLink> {
   const nodes: BrainNode[] = []
   const links: BrainLink[] = []
-  const centerX = 0
-  const centerY = 0
 
   playbookRows.forEach((row: PlaybookRow, index: number) => {
-    const side = index % 2 === 0 ? -1 : 1
-    const lane = Math.floor(index / 2)
-    const angle = -1.22 + lane * 0.38
-    const topicX = centerX + side * (145 + Math.sin(lane) * 32)
-    const topicY = centerY + Math.sin(angle) * 185 + Math.cos(index * 0.7) * 16
+    const angle = index * 2.399963
+    const radius = Math.sqrt((index + 1) / playbookRows.length)
+    const topicPoint = keepInsideBrain(
+      Math.cos(angle) * BRAIN_RX * 0.58 * radius,
+      Math.sin(angle) * BRAIN_RY * 0.72 * radius,
+      0.68
+    )
+    const topicX = topicPoint.x
+    const topicY = topicPoint.y
     const topicId = `topic_${row.id}`
+    const fallbackIds: string[] = []
 
     nodes.push({
       id: topicId,
@@ -188,7 +130,7 @@ function buildBrainData(): GraphData<BrainNode, BrainLink> {
       kind: 'topic',
       clause: row.clause,
       detail: row.why,
-      datasets: ['Sample NDA Playbook.csv.xlsx'],
+      datasets: [row.sourceFile],
       commits: [
         `Initial extraction: ${row.clause}`,
         'Mapped playbook row into preferred, fallback, and risk positions'
@@ -199,61 +141,96 @@ function buildBrainData(): GraphData<BrainNode, BrainLink> {
     })
 
     const preferredId = `${row.id}_preferred`
+    const preferredPoint = keepInsideBrain(topicX + Math.cos(angle - 0.82) * 42, topicY + Math.sin(angle - 0.82) * 35)
     nodes.push({
       id: preferredId,
       label: 'Preferred',
       kind: 'preferred',
       clause: row.clause,
       detail: row.preferred,
-      datasets: ['Sample NDA Playbook.csv.xlsx'],
+      datasets: [row.sourceFile],
       commits: [
         'Preferred position committed from source playbook',
         'No lawyer override recorded'
       ],
-      x: topicX + side * 58,
-      y: topicY - 34,
+      x: preferredPoint.x,
+      y: preferredPoint.y,
       val: 3.2
     })
     links.push({ source: topicId, target: preferredId, strength: 1, kind: 'preferred' })
 
     row.fallbacks.forEach((fallback: string, fallbackIndex: number) => {
       const fallbackId = `${row.id}_fallback_${fallbackIndex + 1}`
+      fallbackIds.push(fallbackId)
+      const fallbackAngle = angle + 0.32 + fallbackIndex * 0.42
+      const fallbackPoint = keepInsideBrain(
+        topicX + Math.cos(fallbackAngle) * (52 + fallbackIndex * 18),
+        topicY + Math.sin(fallbackAngle) * (42 + fallbackIndex * 14)
+      )
       nodes.push({
         id: fallbackId,
         label: `Fallback ${fallbackIndex + 1}`,
         kind: 'fallback',
         clause: row.clause,
         detail: fallback,
-        datasets: ['Sample NDA Playbook.csv.xlsx'],
+        datasets: [row.sourceFile],
         commits: [
           `Fallback ${fallbackIndex + 1} committed from source playbook`,
           'Available only when negotiation pressure justifies deviation'
         ],
-        x: topicX + side * (78 + fallbackIndex * 24),
-        y: topicY + 10 + fallbackIndex * 32,
+        x: fallbackPoint.x,
+        y: fallbackPoint.y,
         val: 2.5
       })
       links.push({ source: topicId, target: fallbackId, strength: 0.72, kind: 'fallback' })
       links.push({ source: preferredId, target: fallbackId, strength: 0.28, kind: 'fallback' })
+      if (fallbackIndex > 0) {
+        links.push({ source: fallbackIds[fallbackIndex - 1], target: fallbackId, strength: 0.2, kind: 'fallback' })
+      }
     })
 
     const negativeId = `${row.id}_negative`
+    const negativePoint = keepInsideBrain(topicX + Math.cos(angle + 2.2) * 48, topicY + Math.sin(angle + 2.2) * 44)
     nodes.push({
       id: negativeId,
       label: 'Red line + escalation',
       kind: 'negative',
       clause: row.clause,
       detail: `${row.redLine}. Escalate: ${row.escalation}.`,
-      datasets: ['Sample NDA Playbook.csv.xlsx'],
+      datasets: [row.sourceFile],
       commits: [
         'Risk boundary committed from red-line and escalation columns',
         'Requires lawyer approval before changing'
       ],
-      x: topicX - side * 36,
-      y: topicY + 48,
+      x: negativePoint.x,
+      y: negativePoint.y,
       val: 3
     })
     links.push({ source: topicId, target: negativeId, strength: 0.86, kind: 'negative' })
+    if (fallbackIds.length > 0) {
+      links.push({ source: fallbackIds[fallbackIds.length - 1], target: negativeId, strength: 0.16, kind: 'negative' })
+    }
+  })
+
+  playbookRows.forEach((row: PlaybookRow, index: number) => {
+    const currentTopic = `topic_${row.id}`
+    const nextTopic = `topic_${playbookRows[(index + 1) % playbookRows.length].id}`
+    links.push({ source: currentTopic, target: nextTopic, strength: 0.18, kind: 'fallback' })
+  })
+
+  const conceptualBridges: Array<[string, string]> = [
+    ['topic_type_of_nda', 'topic_permitted_recipients'],
+    ['topic_marking_of_confidential_info', 'topic_exceptions_to_confidentiality'],
+    ['topic_return_destruction_of_backups', 'topic_contract_term_confidentiality_period'],
+    ['topic_liability_for_correctness', 'topic_other_liabilities_indemnification'],
+    ['topic_contractual_penalty', 'topic_other_liabilities_indemnification'],
+    ['topic_ip_rights_know_how', 'topic_permitted_recipients'],
+    ['topic_choice_of_law', 'topic_dispute_resolution_language'],
+    ['topic_signatures_authority', 'topic_type_of_nda']
+  ]
+
+  conceptualBridges.forEach(([source, target]: [string, string]) => {
+    links.push({ source, target, strength: 0.12, kind: 'preferred' })
   })
 
   return { nodes, links }
@@ -281,21 +258,25 @@ function App(): JSX.Element {
   const graphRef = React.useRef<ForceGraphMethods<BrainNode, BrainLink>>()
   const size = useWindowSize()
   const graphData = React.useMemo<GraphData<BrainNode, BrainLink>>(() => buildBrainData(), [])
+  const [selectedNode, setSelectedNode] = React.useState<BrainNode | null>(null)
 
   React.useEffect(() => {
     const graph = graphRef.current
     if (!graph) return
 
-    graph.d3Force('charge')?.strength?.(-58)
+    graph.d3Force('charge')?.strength?.(-18)
+    graph.d3Force('brainBoundary', createBrainBoundaryForce())
     graph.d3Force('link')?.distance?.((link: LinkObject<BrainNode, BrainLink>) => {
       const typedLink = link as LinkObject<BrainNode, BrainLink> & BrainLink
-      return typedLink.kind === 'negative' ? 76 : typedLink.kind === 'fallback' ? 58 : 48
+      return typedLink.kind === 'negative' ? 42 : typedLink.kind === 'fallback' ? 34 : 28
     })
-    graph.zoomToFit(900, 72)
+    graph.centerAt(0, 0, 0)
+    graph.zoom(1.28, 0)
 
     const reheater = window.setInterval(() => {
+      graph.centerAt(0, 0, 650)
       graph.d3ReheatSimulation()
-    }, 2400)
+    }, 3200)
 
     return () => window.clearInterval(reheater)
   }, [])
@@ -395,6 +376,10 @@ function App(): JSX.Element {
             const typedLink = link as LinkObject<BrainNode, BrainLink> & BrainLink
             return typedLink.kind === 'preferred' ? 'rgba(0, 121, 118, .52)' : 'rgba(74, 36, 48, .34)'
           }}
+          onNodeClick={(node: NodeObject<BrainNode>) => {
+            setSelectedNode(node as SimNode)
+          }}
+          onBackgroundClick={() => setSelectedNode(null)}
           autoPauseRedraw={false}
           cooldownTicks={Infinity}
           d3AlphaDecay={0.012}
@@ -411,7 +396,73 @@ function App(): JSX.Element {
         <span><i className="fallback" /> Fallback</span>
         <span><i className="negative" /> Red line / escalation</span>
       </div>
+      {selectedNode && <AuditPanel node={selectedNode} onClose={() => setSelectedNode(null)} />}
     </main>
+  )
+}
+
+function AuditPanel({ node, onClose }: { node: BrainNode; onClose: () => void }): JSX.Element {
+  const version = node.kind === 'topic' ? 'v1.0' : node.kind === 'preferred' ? 'v1.1' : node.kind === 'fallback' ? 'v1.2' : 'v1.3'
+  const sourceType = node.kind === 'negative' ? 'Dataset + legal guardrail' : 'Dataset extraction'
+  const actor = node.kind === 'negative' ? 'Senior Legal' : node.kind === 'fallback' ? 'Lou Parser, reviewed by Legal' : 'Lou Parser'
+  const change = node.kind === 'topic'
+    ? 'Created clause family from playbook row.'
+    : node.kind === 'preferred'
+      ? 'Committed preferred position as the default decision path.'
+      : node.kind === 'fallback'
+        ? 'Added negotiable fallback path under lawyer review.'
+        : 'Linked red line and escalation trigger into one risk boundary.'
+
+  return (
+    <aside className="auditPanel">
+      <button className="closeButton" onClick={onClose} aria-label="Close audit panel">Close</button>
+      <p className="panelKicker">Version control</p>
+      <h2>{node.clause}</h2>
+      <span className={`typePill ${node.kind}`}>{node.label}</span>
+
+      <section>
+        <dl>
+          <div>
+            <dt>Version</dt>
+            <dd>{version}</dd>
+          </div>
+          <div>
+            <dt>Source type</dt>
+            <dd>{sourceType}</dd>
+          </div>
+          <div>
+            <dt>Dataset</dt>
+            <dd>{node.datasets.join(', ')}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section>
+        <h3>Current Text</h3>
+        <p>{node.detail}</p>
+      </section>
+
+      <section>
+        <h3>Commits</h3>
+        <ol className="commits">
+          <li>
+            <strong>{actor}</strong>
+            <span>Today, 12:18</span>
+            <p>{change}</p>
+          </li>
+          <li>
+            <strong>Lou Parser</strong>
+            <span>Today, 12:03</span>
+            <p>{node.commits[0]}</p>
+          </li>
+          <li>
+            <strong>Dataset import</strong>
+            <span>Today, 12:00</span>
+            <p>Imported from {node.datasets[0]}.</p>
+          </li>
+        </ol>
+      </section>
+    </aside>
   )
 }
 
