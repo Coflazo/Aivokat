@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="190" viewBox="0 0 520 190" role="img" aria-label="Lou">
+  <defs>
+    <pattern id="dots" width="12" height="12" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.15" fill="#d6d6d6"/>
+    </pattern>
+  </defs>
+  <rect x="18" y="18" width="484" height="154" rx="14" fill="#ffffff" stroke="#b8b8b8" stroke-width="2"/>
+  <rect x="19" y="19" width="482" height="152" rx="13" fill="url(#dots)"/>
+  <text
+    x="260"
+    y="122"
+    text-anchor="middle"
+    font-family="Cedarville Cursive, Bradley Hand, Brush Script MT, cursive"
+    font-size="92"
+    font-weight="400"
+    fill="#050505">Lou</text>
+</svg>
