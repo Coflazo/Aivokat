@@ -100,7 +100,7 @@ async def process_new_contract(
     else:
         raise ValueError(f"Unsupported contract format: {suffix}")
 
-    # Extract clauses
+    # First pull out the contract clauses we want Lou to compare.
     max_chars = 10000
     chunk = contract_text[:max_chars]
     result = await complete_json(
@@ -120,10 +120,10 @@ async def process_new_contract(
         if not clause_text:
             continue
 
-        # Find the most similar existing rule
+        # Match this clause to the closest playbook rule.
         matches = search_rules(f"{topic}: {implied_position}", n_results=1)
         if not matches:
-            # No existing rules at all — NEW_RULE
+            # If there is no playbook yet, this has to become a new-rule proposal.
             reasoning = f"No existing playbook rule found for this topic. The contract clause introduces a new position on '{topic}'."
             pc = ProposedCommit(
                 rule_id=topic.lower().replace(" ", "_")[:50],
@@ -176,7 +176,7 @@ async def process_new_contract(
         else:
             change_type = _classify_similarity(similarity, relationship)
 
-        # Skip CONFIRMS with high similarity — not interesting enough to propose
+        # Very strong confirmations do not need to clutter the review queue.
         if change_type == ChangeType.CONFIRMS and similarity >= 0.90:
             continue
 

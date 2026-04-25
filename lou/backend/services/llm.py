@@ -7,6 +7,8 @@ from backend.core.config import settings
 os.environ["OPENAI_API_KEY"] = settings.openai_api_key
 litellm.drop_params = True
 
+_BLOCKED_MODELS: set[str] = set()
+
 
 async def complete(
     system_prompt: str,
@@ -15,29 +17,43 @@ async def complete(
     max_tokens: int = 2000,
     response_format: dict | None = None,
 ) -> str:
-    kwargs: dict = {
-        "model": settings.llm_model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
-        # gpt-5.5 only supports default temperature (1.0); drop custom values
-        "temperature": 1.0,
-        "max_tokens": max_tokens,
-    }
-    # gpt-5.5 may not support response_format — drop_params handles it
-    if response_format:
-        kwargs["response_format"] = response_format
+    last_error: Exception | None = None
+    for model in _candidate_models():
+        if model in _BLOCKED_MODELS:
+            continue
 
-    response = await litellm.acompletion(**kwargs)
-    return response.choices[0].message.content or ""
+        kwargs: dict = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            "temperature": _temperature_for_model(model, temperature),
+            "max_tokens": max_tokens,
+        }
+        if response_format:
+            kwargs["response_format"] = response_format
+
+        try:
+            response = await litellm.acompletion(**kwargs)
+            return response.choices[0].message.content or ""
+        except Exception as exc:
+            last_error = exc
+            if _looks_like_model_access_error(exc):
+                _BLOCKED_MODELS.add(model)
+                continue
+            raise
+
+    if last_error:
+        raise last_error
+    raise RuntimeError("No LLM models are configured.")
 
 
 def _extract_json(text: str) -> dict:
     """Extract JSON from model output, stripping markdown fences if present."""
-    # Strip markdown code blocks
+    # Some models wrap JSON in fences, so clean that off first.
     clean = re.sub(r"```(?:json)?\s*", "", text).strip().rstrip("`").strip()
-    # Find first { ... } or [ ... ]
+    # Start at the first JSON-looking character and let json.loads do the rest.
     start = min(
         (clean.find("{") if "{" in clean else len(clean)),
         (clean.find("[") if "[" in clean else len(clean)),
@@ -52,7 +68,7 @@ async def complete_json(
     user_message: str,
     max_tokens: int = 3000,
 ) -> dict:
-    # Try with json_object format first, fall back to plain text parsing
+    # Ask for JSON first. If the model ignores that option, parse the text below.
     try:
         raw = await complete(
             system_prompt=system_prompt,
@@ -74,3 +90,29 @@ async def complete_json(
             return _extract_json(raw)
         except (ValueError, json.JSONDecodeError) as e:
             raise ValueError(f"LLM returned invalid JSON: {e}\nRaw: {raw[:500]}")
+
+
+def _candidate_models() -> list[str]:
+    models = [settings.llm_model]
+    models.extend(model.strip() for model in settings.llm_fallback_models.split(",") if model.strip())
+    seen: set[str] = set()
+    return [model for model in models if not (model in seen or seen.add(model))]
+
+
+def _looks_like_model_access_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(
+        marker in message
+        for marker in (
+            "model_not_found",
+            "does not have access",
+            "not have access to model",
+            "model does not exist",
+        )
+    )
+
+
+def _temperature_for_model(model: str, requested: float | None) -> float:
+    if model.startswith("gpt-5"):
+        return 1.0
+    return requested if requested is not None else settings.llm_temperature

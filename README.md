@@ -1,6 +1,8 @@
 <div align="center">
 
-<img src="./assets/lou-wordmark.svg" width="220" alt="Lou">
+<div style="display:inline-block;padding:18px 34px;background:#ffffff;border:1px solid #b8b8b8;border-radius:10px;background-image:radial-gradient(#d6d6d6 1px, transparent 1px);background-size:12px 12px;">
+  <img src="./assets/lou-wordmark.svg" width="220" alt="Lou">
+</div>
 
 **Munich Hacking Legal 2026 - Siemens AG Challenge**
 

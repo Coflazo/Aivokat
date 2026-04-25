@@ -8,19 +8,19 @@ from openpyxl.utils import get_column_letter
 from backend.core.schema import Rule, Commit, ChangeType
 
 RULE_TYPE_FILLS = {
-    "standard":   PatternFill("solid", fgColor="C6EFCE"),   # green
-    "fallback":   PatternFill("solid", fgColor="FFEB9C"),   # amber
-    "red_line":   PatternFill("solid", fgColor="FFC7CE"),   # red
-    "escalation": PatternFill("solid", fgColor="BDD7EE"),   # blue
+    "standard":   PatternFill("solid", fgColor="C6EFCE"),   # Standard rows get green.
+    "fallback":   PatternFill("solid", fgColor="FFEB9C"),   # Fallback rows get amber.
+    "red_line":   PatternFill("solid", fgColor="FFC7CE"),   # Red lines need to stand out.
+    "escalation": PatternFill("solid", fgColor="BDD7EE"),   # Escalation rows get blue.
 }
 
 CHANGE_TYPE_FILLS = {
-    "confirms":    PatternFill("solid", fgColor="E2EFDA"),  # light green
-    "contradicts": PatternFill("solid", fgColor="FFDDD8"),  # light red
-    "new_rule":    PatternFill("solid", fgColor="D9E1F2"),  # light blue
-    "manual":      PatternFill("solid", fgColor="EDEDED"),  # light gray
+    "confirms":    PatternFill("solid", fgColor="E2EFDA"),  # A confirmed rule gets soft green.
+    "contradicts": PatternFill("solid", fgColor="FFDDD8"),  # A conflict gets soft red.
+    "new_rule":    PatternFill("solid", fgColor="D9E1F2"),  # New-rule proposals get soft blue.
+    "manual":      PatternFill("solid", fgColor="EDEDED"),  # Manual edits stay neutral.
     "initial":     PatternFill("solid", fgColor="FFFFFF"),
-    "extends":     PatternFill("solid", fgColor="FFF2CC"),  # light yellow
+    "extends":     PatternFill("solid", fgColor="FFF2CC"),  # Extensions get soft yellow.
 }
 
 HEADER_FILL = PatternFill("solid", fgColor="1F2937")
@@ -54,7 +54,7 @@ def _autofit(ws) -> None:
 def generate_excel(rules: list[Rule], commits: list[Commit]) -> bytes:
     wb = Workbook()
 
-    # ── Sheet 1: Rules ────────────────────────────────────────────────────────
+    # Sheet 1 is the current playbook.
     ws_rules = wb.active
     ws_rules.title = "Rules"
     rule_headers = [
@@ -84,13 +84,13 @@ def generate_excel(rules: list[Rule], commits: list[Commit]) -> bytes:
             cell = ws_rules.cell(row=row_idx, column=col_idx, value=val)
             cell.alignment = Alignment(wrap_text=True, vertical="top")
             cell.border = THIN
-            if col_idx == 4 and fill:  # Rule Type column
+            if col_idx == 4 and fill:  # Color the Rule Type cell.
                 cell.fill = fill
 
     ws_rules.freeze_panes = "A2"
     _autofit(ws_rules)
 
-    # ── Sheet 2: Changelog ────────────────────────────────────────────────────
+    # Sheet 2 is the commit log.
     ws_log = wb.create_sheet("Changelog")
     log_headers = [
         "Timestamp", "Rule ID", "Change Type", "Changed By",
@@ -132,14 +132,14 @@ def generate_excel(rules: list[Rule], commits: list[Commit]) -> bytes:
     ws_log.freeze_panes = "A2"
     _autofit(ws_log)
 
-    # ── Sheet 3: Sources ──────────────────────────────────────────────────────
+    # Sheet 3 shows which documents fed the playbook.
     ws_src = wb.create_sheet("Sources")
     src_headers = ["Source Document", "Rules Informed", "Upload Date", "Uploaded By"]
     for col, h in enumerate(src_headers, 1):
         ws_src.cell(row=1, column=col, value=h)
         _style_header(ws_src, 1, col)
 
-    # Aggregate source data from commits
+    # Build one row per source document.
     source_map: dict[str, dict] = {}
     for commit in commits:
         doc = commit.source_document or "Playbook"

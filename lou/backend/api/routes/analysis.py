@@ -51,7 +51,7 @@ async def analyze_playbook(playbook_id: str) -> PlaybookApiView:
         existing_open = session.exec(
             select(PlaybookIssue).where(
                 PlaybookIssue.playbook_id == playbook_id,
-                PlaybookIssue.resolved_at == None,  # noqa: E711
+                PlaybookIssue.resolved_at == None,  # noqa: E711 - SQLModel needs this form for IS NULL.
             )
         ).all()
         for issue in existing_open:
@@ -172,7 +172,7 @@ def _refresh_clause_status(session: Session, clause: PlaybookClause) -> None:
         select(PlaybookIssue).where(
             PlaybookIssue.playbook_id == clause.playbook_id,
             PlaybookIssue.clause_id == clause.clause_id,
-            PlaybookIssue.resolved_at == None,  # noqa: E711
+            PlaybookIssue.resolved_at == None,  # noqa: E711 - SQLModel needs this form for IS NULL.
         )
     ).all()
     if any(issue.severity.value == "critical" for issue in open_issues):

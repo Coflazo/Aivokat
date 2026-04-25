@@ -2,18 +2,19 @@ import os
 from pathlib import Path
 from pydantic_settings import BaseSettings
 
-# Walk up from this file to find .env (supports running from backend/ or lou/)
+# Look for .env in the two places we usually run the backend from.
 _here = Path(__file__).resolve()
 _env_candidates = [
-    _here.parent.parent.parent / ".env",  # lou/.env  (running from TUMHL)
-    _here.parent.parent / ".env",          # backend/.env (running from lou)
+    _here.parent.parent.parent / ".env",  # This is lou/.env when we start from TUMHL.
+    _here.parent.parent / ".env",          # This is backend/.env when we start from lou.
 ]
 _env_file = next((str(p) for p in _env_candidates if p.exists()), ".env")
 
 
 class Settings(BaseSettings):
     openai_api_key: str
-    llm_model: str = "gpt-4o-mini"
+    llm_model: str = "gpt-5.5"
+    llm_fallback_models: str = "gpt-5.5"
     llm_temperature: float = 0.1
     embedding_model: str = "all-mpnet-base-v2"
     lou_embedding_model_path: str = "./models/lou-retriever"

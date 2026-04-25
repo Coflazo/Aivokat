@@ -76,7 +76,7 @@ class Rule(SQLModel, table=True):
     reasoning: str
     suggested_language: Optional[str] = None
     decision_logic: Optional[str] = None
-    sources: str = "[]"           # JSON list of source doc names
+    sources: str = "[]"           # Store source filenames as a JSON list.
     confidence: float = 1.0
     version: int = 1
     committed_by: str = "Seed"
@@ -92,7 +92,7 @@ class Commit(SQLModel, table=True):
     id: Optional[int] = SQLField(default=None, primary_key=True)
     commit_hash: str = SQLField(unique=True, index=True)
     rule_id: str = SQLField(index=True)
-    topic: str = ""               # denormalized for query speed
+    topic: str = ""               # Keep the topic here so history queries stay simple.
     change_type: ChangeType
     old_value: Optional[str] = None
     new_value: str
@@ -122,7 +122,7 @@ class ProposedCommit(SQLModel, table=True):
     created_at: datetime = SQLField(default_factory=datetime.utcnow)
 
 
-# ── Playbook API Engine tables ────────────────────────────────────────────────
+# Main database rows for the Playbook API flow.
 
 class Playbook(SQLModel, table=True):
     """Primary playbook object for the pivot product.
@@ -159,7 +159,7 @@ class PlaybookClause(SQLModel, table=True):
     fallback_2: Optional[str] = None
     red_line: Optional[str] = None
     escalation_trigger: Optional[str] = None
-    rewritten_fields: str = "{}"  # JSON object keyed by field name
+    rewritten_fields: str = "{}"  # Track accepted rewrites by field name.
     analysis_status: ClauseAnalysisStatus = ClauseAnalysisStatus.CLEAN
     analysis_summary: Optional[str] = None
     created_at: datetime = SQLField(default_factory=datetime.utcnow)
@@ -217,7 +217,7 @@ class MegaBrainEntry(SQLModel, table=True):
         return json.loads(self.metadata_json or "{}")
 
 
-# ── API models ────────────────────────────────────────────────────────────────
+# Request and response shapes used by the API.
 
 class ChatMessage(BaseModel):
     role: str
@@ -318,7 +318,7 @@ class BrainEdgeView(BaseModel):
     target: str
     similarity: float
     relationship: str
-    edge_scope: str = "island"  # "island" | "cross_island"
+    edge_scope: str = "island"  # Use "cross_island" only for mega-brain links.
 
 
 class PlaybookBrainView(BaseModel):
@@ -550,7 +550,7 @@ class GraphNode(BaseModel):
     reasoning: str
     decision_logic: Optional[str] = None
     sources: list[str]
-    lifecycle: str = "active"  # "active" | "staged" | "approved"
+    lifecycle: str = "active"  # The old graph UI still expects this field.
 
 
 class GraphEdge(BaseModel):
@@ -565,7 +565,7 @@ class GraphData(BaseModel):
 
 
 class ApprovalRequest(BaseModel):
-    decision: ApprovalStatus       # only APPROVED or REJECTED accepted
+    decision: ApprovalStatus       # Review actions should only send approved or rejected.
     lawyer_name: str
     lawyer_note: Optional[str] = None
-    proposed_text: Optional[str] = None   # lawyer may edit text before approving
+    proposed_text: Optional[str] = None   # Optional lawyer edit before approval.

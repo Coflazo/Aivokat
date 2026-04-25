@@ -56,7 +56,7 @@ async def approve_or_reject(proposed_id: int, body: ApprovalRequest):
         now_str = pc.reviewed_at.isoformat()
 
         if body.decision == ApprovalStatus.APPROVED:
-            # Apply the change to the playbook
+            # Only approved items are allowed to touch the live rule.
             rule = session.exec(select(Rule).where(Rule.rule_id == pc.rule_id)).first()
             proposed_data = json.loads(pc.proposed_change) if pc.proposed_change else {}
 
@@ -71,7 +71,7 @@ async def approve_or_reject(proposed_id: int, body: ApprovalRequest):
                 })
 
             if pc.change_type == ChangeType.NEW_RULE and not rule:
-                # Create a new rule
+                # No matching rule exists yet, so create one.
                 rule = Rule(
                     rule_id=pc.rule_id,
                     topic=proposed_data.get("topic", pc.rule_id),
@@ -90,7 +90,7 @@ async def approve_or_reject(proposed_id: int, body: ApprovalRequest):
                 session.flush()
                 add_rule(rule)
             elif rule:
-                # Update existing rule
+                # Keep the old rule and append the lawyer-approved update.
                 implied = proposed_data.get("implied_position", "")
                 update_text = body.proposed_text or implied
                 if update_text and pc.change_type in (ChangeType.CONTRADICTS, ChangeType.EXTENDS, ChangeType.CONFIRMS):
@@ -124,7 +124,7 @@ async def approve_or_reject(proposed_id: int, body: ApprovalRequest):
             session.flush()
             add_commit(commit, commit.topic)
         else:
-            # Rejected — just log it
+            # Rejections still go into the history.
             commit = Commit(
                 commit_hash=_commit_hash(pc.rule_id + "_reject", now_str),
                 rule_id=pc.rule_id,

@@ -45,7 +45,7 @@ async def upload_playbook(
             if not rule_id:
                 continue
 
-            # Check for existing rule
+            # Do not import the same rule twice.
             existing = session.exec(select(Rule).where(Rule.rule_id == rule_id)).first()
             if existing:
                 continue

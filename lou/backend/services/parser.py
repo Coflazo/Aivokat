@@ -37,10 +37,8 @@ PLAYBOOK CONTENT:
 def parse_excel_playbook(file_path: str | Path) -> list[dict]:
     """Parse the Siemens NDA playbook directly.
 
-    The real file is named "Sample NDA Playbook.csv.xlsx" and has eight
-    columns:
-    0 Clause #, 1 Clause Name, 2 Why It Matters, 3 Preferred Position,
-    4 Fallback 1, 5 Fallback 2, 6 Red Line, 7 Escalation Trigger.
+    The real file is named "Sample NDA Playbook.csv.xlsx". The first eight
+    cells in each row map straight to the fields below, in the same order.
     """
     wb = openpyxl.load_workbook(file_path, data_only=True)
     ws = wb.active

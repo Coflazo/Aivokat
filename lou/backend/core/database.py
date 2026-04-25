@@ -3,7 +3,7 @@ from sqlalchemy import inspect, text
 from sqlmodel import SQLModel, create_engine, Session
 from backend.core.config import settings
 
-# Resolve the DB path relative to the backend directory
+# Make sure the SQLite folder exists before SQLModel opens the file.
 db_path = settings.database_url.replace("sqlite:///", "")
 os.makedirs(os.path.dirname(db_path) if os.path.dirname(db_path) else ".", exist_ok=True)
 
@@ -21,11 +21,10 @@ def get_session():
 
 
 def _run_lightweight_migrations() -> None:
-    """Small SQLite migrations for the hackathon local database.
+    """Tiny local migrations for the SQLite demo database.
 
-    SQLModel's create_all creates missing tables but does not add new columns to
-    existing tables. Keep this narrow and explicit until a real migration tool is
-    introduced.
+    create_all can make missing tables, but it will not add new columns to a
+    table that already exists. Keep this small until we add Alembic.
     """
     inspector = inspect(engine)
     if "playbookissue" not in inspector.get_table_names():

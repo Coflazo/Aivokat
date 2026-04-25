@@ -1,7 +1,7 @@
 import sys
 import os
 
-# Ensure backend package is importable when running from the backend/ directory
+# Keep imports working when uvicorn is started from backend/.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from contextlib import asynccontextmanager

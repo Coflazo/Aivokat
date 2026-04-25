@@ -6,8 +6,8 @@ from pathlib import Path
 
 try:
     from sentence_transformers import SentenceTransformer
-except Exception:  # pragma: no cover - dependency may be absent in lightweight environments
-    SentenceTransformer = None  # type: ignore
+except Exception:  # pragma: no cover - lets tests pass when this package is not installed
+    SentenceTransformer = None  # type: ignore[assignment]
 
 from backend.core.config import settings
 
@@ -16,8 +16,8 @@ from backend.core.config import settings
 def get_embedder():
     """Load the sentence-transformer if it is already available locally.
 
-    The hackathon demo should not hang or fail just because the model has not
-    been downloaded yet, so network downloads are intentionally avoided here.
+    The demo should still start if the big model is missing, so we only load
+    models that are already on disk.
     """
     if SentenceTransformer is None:
         return None
