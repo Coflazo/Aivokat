@@ -8,10 +8,10 @@
   <rect x="19" y="19" width="482" height="152" rx="13" fill="url(#dots)"/>
   <text
     x="260"
-    y="122"
+    y="126"
     text-anchor="middle"
-    font-family="Cedarville Cursive, Bradley Hand, Brush Script MT, cursive"
-    font-size="92"
+    font-family="Cedarville Cursive, SignPainter, Snell Roundhand, Brush Script MT, Bradley Hand, cursive"
+    font-size="104"
     font-weight="400"
     fill="#050505">Lou</text>
 </svg>
