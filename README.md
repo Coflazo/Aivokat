@@ -1,6 +1,6 @@
 <div align="center">
 
-# Aivokat
+# Lou
 
 <img src="https://download.logo.wine/logo/Siemens/Siemens-Logo.wine.png" width="180">
 

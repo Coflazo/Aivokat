@@ -63,8 +63,19 @@ export default function Layout({ screen, onNavigate, children }: Props) {
       }}>
         {/* Logo */}
         <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid #1e293b' }}>
-          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 22, fontWeight: 500, color: '#00d4aa', letterSpacing: -0.5 }}>Lou</span>
-          <div style={{ fontSize: 10, color: '#475569', marginTop: 2, fontFamily: "'IBM Plex Mono', monospace" }}>Playbook Engine v1.0</div>
+          <span style={{
+            display: 'inline-block',
+            fontFamily: "'Cedarville Cursive', cursive",
+            fontSize: 34,
+            fontWeight: 400,
+            color: '#050505',
+            letterSpacing: 0,
+            lineHeight: 1,
+            background: '#f4ead8',
+            borderRadius: 6,
+            padding: '2px 12px 5px',
+          }}>Lou</span>
+          <div style={{ fontSize: 10, color: '#475569', marginTop: -4, fontFamily: "'IBM Plex Mono', monospace" }}>Playbook Engine</div>
         </div>
 
         {/* Nav */}
