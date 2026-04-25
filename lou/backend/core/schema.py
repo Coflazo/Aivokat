@@ -304,6 +304,76 @@ class PlaybookClausePatchResponse(BaseModel):
     draft_diff: dict
 
 
+class BrainNodeView(BaseModel):
+    id: str
+    label: str
+    status: ClauseAnalysisStatus
+    color: str
+    island_id: Optional[str] = None
+    clause: PlaybookClauseView
+
+
+class BrainEdgeView(BaseModel):
+    source: str
+    target: str
+    similarity: float
+    relationship: str
+    edge_scope: str = "island"  # "island" | "cross_island"
+
+
+class PlaybookBrainView(BaseModel):
+    playbook_id: str
+    version: int
+    status: PlaybookStatus
+    nodes: list[BrainNodeView]
+    edges: list[BrainEdgeView]
+
+
+class PublishPlaybookRequest(BaseModel):
+    committed_by: str
+    comment: str
+
+
+class PublishPlaybookResponse(BaseModel):
+    playbook: PlaybookApiView
+    commit_hash: str
+    mega_brain_entries: int
+
+
+class MegaBrainModuleView(BaseModel):
+    playbook_id: str
+    playbook_version: int
+    name: str
+    owner: str
+    topics: list[str]
+    node_count: int
+
+
+class MegaBrainIslandView(BaseModel):
+    playbook_id: str
+    playbook_version: int
+    name: str
+    owner: str
+    nodes: list[BrainNodeView]
+    edges: list[BrainEdgeView]
+
+
+class MegaBrainView(BaseModel):
+    modules: list[MegaBrainModuleView]
+    islands: list[MegaBrainIslandView]
+    nodes: list[BrainNodeView]
+    edges: list[BrainEdgeView]
+
+
+class MegaBrainSearchResult(BaseModel):
+    playbook_id: str
+    playbook_version: int
+    clause_id: str
+    topic: str
+    document: str
+    similarity: float
+
+
 class RewriteCellRequest(BaseModel):
     playbook_id: str
     clause_id: str

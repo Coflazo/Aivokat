@@ -7,7 +7,7 @@ import numpy as np
 from chromadb.config import Settings as ChromaSettings
 
 from backend.core.config import settings
-from backend.core.schema import Commit, Rule
+from backend.core.schema import Commit, Playbook, PlaybookClause, Rule
 from backend.services.embedder import embed_text
 
 
@@ -31,6 +31,13 @@ def get_rules_collection():
 def get_commits_collection():
     return get_chroma_client().get_or_create_collection(
         name="lou_commits",
+        metadata={"hnsw:space": "cosine"},
+    )
+
+
+def get_mega_brain_collection():
+    return get_chroma_client().get_or_create_collection(
+        name="lou_mega_brain",
         metadata={"hnsw:space": "cosine"},
     )
 
@@ -206,3 +213,63 @@ def search_precedents(query: str, n_results: int = 3) -> list[dict]:
         }
         for idx in range(len(results["ids"][0]))
     ]
+
+
+def playbook_clause_to_text(clause: PlaybookClause) -> str:
+    parts = [
+        f"Clause: {clause.clause_name}",
+        f"Why It Matters: {clause.why_it_matters}",
+        f"Preferred Position: {clause.preferred_position}",
+    ]
+    if clause.fallback_1:
+        parts.append(f"Fallback 1: {clause.fallback_1}")
+    if clause.fallback_2:
+        parts.append(f"Fallback 2: {clause.fallback_2}")
+    if clause.red_line:
+        parts.append(f"Red Line: {clause.red_line}")
+    if clause.escalation_trigger:
+        parts.append(f"Escalation Trigger: {clause.escalation_trigger}")
+    return "\n".join(parts)
+
+
+def upsert_mega_brain_clause(playbook: Playbook, clause: PlaybookClause) -> str:
+    col = get_mega_brain_collection()
+    vector_id = f"{playbook.playbook_id}:v{playbook.version}:{clause.clause_id}"
+    text = playbook_clause_to_text(clause)
+    col.upsert(
+        ids=[vector_id],
+        embeddings=[embed_text(text)],
+        documents=[text],
+        metadatas=[{
+            "playbook_id": playbook.playbook_id,
+            "playbook_version": playbook.version,
+            "clause_id": clause.clause_id,
+            "topic": clause.clause_name,
+            "owner": playbook.owner,
+            "status": playbook.status.value if hasattr(playbook.status, "value") else str(playbook.status),
+        }],
+    )
+    return vector_id
+
+
+def search_mega_brain(query: str, n_results: int = 8) -> list[dict]:
+    col = get_mega_brain_collection()
+    if col.count() == 0:
+        return []
+    results = col.query(
+        query_embeddings=[embed_text(query)],
+        n_results=min(n_results, col.count()),
+        include=["documents", "metadatas", "distances"],
+    )
+    output: list[dict] = []
+    for idx in range(len(results["ids"][0])):
+        meta = results["metadatas"][0][idx]
+        distance = float(results["distances"][0][idx])
+        output.append({
+            "vector_id": results["ids"][0][idx],
+            "document": results["documents"][0][idx],
+            "metadata": meta,
+            "distance": distance,
+            "similarity": max(0.0, 1.0 - distance),
+        })
+    return output

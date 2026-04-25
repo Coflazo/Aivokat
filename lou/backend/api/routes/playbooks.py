@@ -4,6 +4,7 @@ import json
 import os
 import re
 import shutil
+import hashlib
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -15,18 +16,27 @@ from sqlmodel import Session, select
 from backend.core.config import settings
 from backend.core.database import engine
 from backend.core.schema import (
+    BrainEdgeView,
+    BrainNodeView,
     ClauseAnalysisStatus,
+    MegaBrainEntry,
     Playbook,
     PlaybookApiView,
     PlaybookClause,
     PlaybookClausePatch,
     PlaybookClausePatchResponse,
     PlaybookClauseView,
+    PlaybookBrainView,
+    PlaybookCommit,
     PlaybookIssue,
     PlaybookIssueView,
     PlaybookStatus,
+    PublishPlaybookRequest,
+    PublishPlaybookResponse,
     PlaybookUploadResponse,
 )
+from backend.services.embedder import embed_text
+from backend.services.vector_store import upsert_mega_brain_clause
 
 router = APIRouter(prefix="/api/playbooks", tags=["playbooks"])
 
@@ -111,6 +121,84 @@ async def upload_playbook(
 @router.get("/{playbook_id}", response_model=PlaybookApiView)
 async def get_playbook(playbook_id: str) -> PlaybookApiView:
     return _load_playbook_view(playbook_id)
+
+
+@router.get("/{playbook_id}/brain", response_model=PlaybookBrainView)
+async def get_playbook_brain(playbook_id: str) -> PlaybookBrainView:
+    return _build_playbook_brain(playbook_id)
+
+
+@router.post("/{playbook_id}/publish", response_model=PublishPlaybookResponse)
+async def publish_playbook(playbook_id: str, request: PublishPlaybookRequest) -> PublishPlaybookResponse:
+    if not request.committed_by.strip():
+        raise HTTPException(status_code=400, detail="Publishing requires a committer name.")
+    if not request.comment.strip():
+        raise HTTPException(status_code=400, detail="Publishing requires a commit comment.")
+
+    now = datetime.utcnow()
+    with Session(engine) as session:
+        playbook = session.exec(select(Playbook).where(Playbook.playbook_id == playbook_id)).first()
+        if not playbook:
+            raise HTTPException(status_code=404, detail="Playbook not found.")
+        clauses = session.exec(
+            select(PlaybookClause)
+            .where(PlaybookClause.playbook_id == playbook_id)
+            .order_by(PlaybookClause.id)
+        ).all()
+        if not clauses:
+            raise HTTPException(status_code=400, detail="Cannot publish a playbook with no clauses.")
+
+        old_status = playbook.status.value if hasattr(playbook.status, "value") else str(playbook.status)
+        playbook.status = PlaybookStatus.PUBLISHED
+        playbook.updated_at = now
+        playbook.published_at = now
+        commit_hash = hashlib.sha1(f"{playbook_id}:{playbook.version}:{request.committed_by}:{request.comment}:{now.isoformat()}".encode()).hexdigest()[:12]
+        commit = PlaybookCommit(
+            playbook_id=playbook_id,
+            version=playbook.version,
+            commit_hash=commit_hash,
+            comment=request.comment,
+            committed_by=request.committed_by,
+            committed_at=now,
+            diff_json=json.dumps({
+                "status": {"old": old_status, "new": PlaybookStatus.PUBLISHED.value},
+                "clauses_published": len(clauses),
+            }),
+        )
+        session.add(playbook)
+        session.add(commit)
+
+        existing_entries = session.exec(
+            select(MegaBrainEntry).where(
+                MegaBrainEntry.playbook_id == playbook_id,
+                MegaBrainEntry.playbook_version == playbook.version,
+            )
+        ).all()
+        for entry in existing_entries:
+            session.delete(entry)
+
+        entries = 0
+        for clause in clauses:
+            vector_id = upsert_mega_brain_clause(playbook, clause)
+            session.add(MegaBrainEntry(
+                playbook_id=playbook_id,
+                playbook_version=playbook.version,
+                topic=clause.clause_name,
+                vector_id=vector_id,
+                metadata_json=json.dumps({
+                    "clause_id": clause.clause_id,
+                    "clause_name": clause.clause_name,
+                    "status": clause.analysis_status.value if hasattr(clause.analysis_status, "value") else str(clause.analysis_status),
+                }),
+            ))
+            entries += 1
+        session.commit()
+
+    return PublishPlaybookResponse(
+        playbook=_load_playbook_view(playbook_id),
+        commit_hash=commit_hash,
+        mega_brain_entries=entries,
+    )
 
 
 @router.patch("/{playbook_id}/clauses/{clause_id}", response_model=PlaybookClausePatchResponse)
@@ -199,6 +287,75 @@ def _load_playbook_view(playbook_id: str) -> PlaybookApiView:
         published_at=playbook.published_at.isoformat() if playbook.published_at else None,
         clauses=[_clause_view(clause, issues_by_clause.get(clause.clause_id, [])) for clause in clauses],
     )
+
+
+def _build_playbook_brain(playbook_id: str) -> PlaybookBrainView:
+    view = _load_playbook_view(playbook_id)
+    nodes = [
+        BrainNodeView(
+            id=clause.clause_id,
+            label=clause.clause_name,
+            status=clause.analysis_status,
+            color=_status_color(clause.analysis_status, view.status),
+            island_id=view.playbook_id,
+            clause=clause,
+        )
+        for clause in view.clauses
+    ]
+    edges = _semantic_edges(view.clauses)
+    return PlaybookBrainView(
+        playbook_id=view.playbook_id,
+        version=view.version,
+        status=view.status,
+        nodes=nodes,
+        edges=edges,
+    )
+
+
+def _semantic_edges(clauses: list[PlaybookClauseView], threshold: float = 0.46) -> list[BrainEdgeView]:
+    if len(clauses) < 2:
+        return []
+    texts = [_clause_text(clause) for clause in clauses]
+    embeddings = [embed_text(text) for text in texts]
+    edges: list[BrainEdgeView] = []
+    for left_index, left in enumerate(clauses):
+        for right_index in range(left_index + 1, len(clauses)):
+            similarity = _dot(embeddings[left_index], embeddings[right_index])
+            if similarity >= threshold:
+                edges.append(BrainEdgeView(
+                    source=left.clause_id,
+                    target=clauses[right_index].clause_id,
+                    similarity=similarity,
+                    relationship="semantic_similarity",
+                    edge_scope="island",
+                ))
+    return edges
+
+
+def _clause_text(clause: PlaybookClauseView) -> str:
+    return "\n".join([
+        clause.clause_name,
+        clause.why_it_matters,
+        clause.preferred_position,
+        clause.fallback_1 or "",
+        clause.fallback_2 or "",
+        clause.red_line or "",
+        clause.escalation_trigger or "",
+    ])
+
+
+def _dot(left: list[float], right: list[float]) -> float:
+    return float(sum(a * b for a, b in zip(left, right)))
+
+
+def _status_color(status: ClauseAnalysisStatus, playbook_status: PlaybookStatus) -> str:
+    if status == ClauseAnalysisStatus.ISSUE:
+        return "#4a2430"
+    if status == ClauseAnalysisStatus.WARNING:
+        return "#ec6602"
+    if playbook_status == PlaybookStatus.PUBLISHED:
+        return "#009999"
+    return "#2f2a22"
 
 
 def _clause_view(clause: PlaybookClause, issues: list[PlaybookIssueView]) -> PlaybookClauseView:

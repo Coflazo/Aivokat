@@ -13,6 +13,7 @@ import { UploadModal } from './components/UploadModal'
 import {
   ApiConsolePage,
   MegaBrainPage,
+  MiniBrainPage,
   PlaybookAnalysisPage,
   PlaybookEditorPage,
   UploadPlaybookPage
@@ -660,7 +661,8 @@ function Shell(): JSX.Element {
         <Route path="/" element={<UploadPlaybookPage />} />
         <Route path="/playbooks/:playbookId/edit" element={<PlaybookEditorPage />} />
         <Route path="/playbooks/:playbookId/analysis" element={<PlaybookAnalysisPage />} />
-        <Route path="/playbooks/:playbookId/brain" element={<App key={refreshKey} />} />
+        <Route path="/playbooks/:playbookId/brain" element={<MiniBrainPage />} />
+        <Route path="/legacy-brain" element={<App key={refreshKey} />} />
         <Route path="/api-console" element={<ApiConsolePage />} />
         <Route path="/mega-brain" element={<MegaBrainPage />} />
       </Routes>

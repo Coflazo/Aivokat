@@ -4,9 +4,13 @@ import type {
   ChatResponse,
   Commit,
   GraphData,
+  MegaBrain,
+  MegaBrainSearchResult,
   PlaybookApi,
+  PlaybookBrain,
   PlaybookPatchResponse,
   PlaybookUploadResponse,
+  PublishPlaybookResponse,
   ProposedCommit,
   RewriteCellResponse,
   RewriteMode,
@@ -131,6 +135,25 @@ export const acceptIssueFix = (issueId: number): Promise<PlaybookApi> =>
 
 export const rejectIssue = (issueId: number): Promise<PlaybookApi> =>
   api.post(`/analysis/issues/${issueId}/reject`).then((r) => r.data)
+
+export const fetchPlaybookBrain = (playbookId: string): Promise<PlaybookBrain> =>
+  api.get(`/playbooks/${playbookId}/brain`).then((r) => r.data)
+
+export const publishPlaybook = (
+  playbookId: string,
+  committedBy: string,
+  comment: string
+): Promise<PublishPlaybookResponse> =>
+  api.post(`/playbooks/${playbookId}/publish`, {
+    committed_by: committedBy,
+    comment,
+  }).then((r) => r.data)
+
+export const fetchMegaBrain = (): Promise<MegaBrain> =>
+  api.get('/mega-brain').then((r) => r.data)
+
+export const searchMegaBrain = (q: string): Promise<MegaBrainSearchResult[]> =>
+  api.get('/mega-brain/search', { params: { q } }).then((r) => r.data)
 
 export const uploadContract = (file: File, lawyerName: string) => {
   const fd = new FormData()

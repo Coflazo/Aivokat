@@ -172,3 +172,70 @@ export interface RewritePlaybookResponse {
   mode: RewriteMode
   rewrites: RewriteCellResponse[]
 }
+
+export interface BrainNodeView {
+  id: string
+  label: string
+  status: ClauseAnalysisStatus
+  color: string
+  island_id?: string | null
+  clause: PlaybookClause
+  x?: number
+  y?: number
+}
+
+export interface BrainEdgeView {
+  source: string | BrainNodeView
+  target: string | BrainNodeView
+  similarity: number
+  relationship: string
+  edge_scope: 'island' | 'cross_island'
+}
+
+export interface PlaybookBrain {
+  playbook_id: string
+  version: number
+  status: PlaybookStatus
+  nodes: BrainNodeView[]
+  edges: BrainEdgeView[]
+}
+
+export interface PublishPlaybookResponse {
+  playbook: PlaybookApi
+  commit_hash: string
+  mega_brain_entries: number
+}
+
+export interface MegaBrainModule {
+  playbook_id: string
+  playbook_version: number
+  name: string
+  owner: string
+  topics: string[]
+  node_count: number
+}
+
+export interface MegaBrainIsland {
+  playbook_id: string
+  playbook_version: number
+  name: string
+  owner: string
+  nodes: BrainNodeView[]
+  edges: BrainEdgeView[]
+}
+
+export interface MegaBrain {
+  modules: MegaBrainModule[]
+  islands: MegaBrainIsland[]
+  nodes: BrainNodeView[]
+  edges: BrainEdgeView[]
+}
+
+export interface MegaBrainSearchResult {
+  playbook_id: string
+  playbook_version: number
+  clause_id: string
+  topic: string
+  document: string
+  similarity: number
+}
