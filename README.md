@@ -2,209 +2,187 @@
 
 <img src="./assets/lou-wordmark.svg" width="220" alt="Lou">
 
-**Munich Hacking Legal 2026 — Siemens AG Challenge**
-
-Lou turns static legal playbooks into a living, queryable, auditable knowledge system.
+**Munich Hacking Legal 2026 - Siemens AG Challenge**
 
 </div>
 
----
-
 ## What Lou Is
 
-Lou is a legal playbook engine. It transforms a Word or Excel negotiation playbook into structured decision knowledge: preferred positions, fallbacks, red lines, escalation triggers, source documents, and commit history.
+Lou is a legal playbook engine for negotiation teams.
 
-Lou is not a bulk contract review tool. It is a system for making legal negotiation knowledge easier to understand, update, audit, and approve.
+It takes the NDA playbook that usually lives in Word or Excel and turns it into structured legal knowledge: preferred positions, fallbacks, red lines, escalation triggers, source documents, and a review history.
 
-## Core Idea
+The important bit is control. Lou can propose updates after a negotiated contract comes in, but it cannot update the live playbook by itself. A lawyer has to approve or reject the change.
 
-Static playbooks are hard to use because they sit in documents, are not AI-ready, and become stale. Lou turns them into an interactive legal knowledge graph with a lawyer-controlled update loop.
+Lou is not a bulk contract review tool. It is the system behind the guidance: the part that tells a team what the playbook says, why it says it, and how that guidance changed over time.
 
-| Challenge question | Lou answer |
+## What It Does
+
+Lou answers four questions from the Siemens brief:
+
+| Question | Lou's answer |
 |---|---|
-| Talk | Ask the playbook plain-language questions and get cited answers. |
-| Think | Convert Word/Excel guidance into structured rules. |
-| Grow | Let new contracts propose updates without auto-changing the playbook. |
-| Scale | Keep source traceability, commits, approvals, and exportable knowledge. |
+| How does a playbook talk? | Ask a plain-English question and get a cited answer from the playbook. |
+| How does it think? | Each clause becomes a structured rule with standard, fallback, red-line, and escalation fields. |
+| How does it grow? | Negotiated contracts create proposed commits for lawyer review. |
+| How does it scale? | The same schema works for NDA, M&A, procurement, or any other playbook type. |
 
-## Guardrails
+The demo uses the Siemens NDA materials in `Siemens Sample Documents/`. The production app lives in `lou/`.
 
-- No vendor lock-in: LLM calls are isolated behind a provider wrapper.
-- No black boxes: answers and nodes cite source documents.
-- Lawyer approval is required: proposed updates do not enter the playbook automatically.
-- Business users get plain language; lawyers get source and audit views.
-
-## Repository Structure
+## Repository
 
 ```text
 .
 ├── README.md
 ├── assets/
-│   ├── lou-wordmark.svg
-│   └── challenge-page-*.png
+│   └── lou-wordmark.svg
 ├── Siemens Sample Documents/
 │   ├── Sample NDA Playbook.csv.xlsx
 │   ├── Sample NDA Playbook.docx
 │   ├── Sample Standard NDA.docx
 │   └── Sample NDAs/
-├── demo UI UX/
-│   └── Cream visual-brain prototype
 └── lou/
     ├── backend/
-    ├── frontend/
-    └── scripts/
+    ├── scripts/
+    ├── src/
+    ├── package.json
+    └── start_*.sh
 ```
-
-## Demo UI
-
-The `demo UI UX` folder contains the current product experience prototype:
-
-- Cream paper-like interface
-- Cedarville Cursive `Lou` wordmark
-- 2D force-directed legal brain
-- Nodes generated from `Sample NDA Playbook.csv.xlsx`
-- Click-to-open audit panel
-- Human-in-the-loop workflow opened manually from `Review change`
-- Local actions for staging, committing, approving, adding fallback nodes, sequencing fallback nodes, and deleting nodes
-
-Run it:
-
-```bash
-cd "demo UI UX"
-npm install
-npm run dev
-```
-
-Open:
-
-```text
-http://localhost:5174/
-```
-
-Build check:
-
-```bash
-cd "demo UI UX"
-npm run build
-```
-
-## Full App
-
-The `lou` folder contains the fuller FastAPI and React implementation.
-
-Backend:
-
-```bash
-cd lou/backend
-uvicorn main:app --reload --port 8000
-```
-
-Frontend:
-
-```bash
-cd lou/frontend
-npm install
-npm run dev
-```
-
-Open:
-
-```text
-http://localhost:5173/
-```
-
-## Data Sources
-
-The Siemens sample materials live in `Siemens Sample Documents/`.
-
-Primary playbook source:
-
-```text
-Siemens Sample Documents/Sample NDA Playbook.csv.xlsx
-```
-
-The visual-brain prototype maps each playbook row into:
-
-- Topic node
-- Preferred position node
-- Fallback node or nodes
-- Red line and escalation node
-- Dataset provenance
-- Commit comments
-
-## Legal Commit Model
-
-Lou treats legal knowledge like controlled versioned knowledge.
-
-Each rule or node can carry:
-
-- Source document
-- Decision family
-- Current legal text
-- Commit comments
-- Last actor
-- Manual or dataset-derived origin
-- Review status
-
-The intended lifecycle is:
-
-```text
-extract → stage → lawyer review → commit → active playbook
-```
-
-## Product Identity
-
-Product name:
-
-```text
-Lou
-```
-
-Wordmark font:
-
-```text
-Cedarville Cursive
-```
-
-Wordmark color:
-
-```text
-Dark black
-```
-
-The README title uses `assets/lou-wordmark.svg` so the title visually matches the in-app Lou wordmark.
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Visual prototype | React, TypeScript, Vite, react-force-graph-2d |
-| Full frontend | React, TypeScript, Vite, D3 |
-| Backend | FastAPI, SQLModel, SQLite |
-| Vector search | ChromaDB |
-| Embeddings | sentence-transformers |
-| LLM wrapper | LiteLLM |
+| Frontend | React, TypeScript, Vite, react-force-graph-2d |
+| API | FastAPI |
+| Relational store | SQLite via SQLModel |
+| Semantic search | ChromaDB |
+| Embeddings | sentence-transformers, with a local deterministic fallback for offline demos |
+| LLM access | LiteLLM |
 | Documents | python-docx, openpyxl, pypdf |
 
-## Verification
+## Run It
 
-Current verified builds:
+Use the Python 3.11 environment that has the backend dependencies installed.
+
+Backend:
 
 ```bash
-cd "demo UI UX" && npm run build
-cd lou/frontend && npm run build
+cd lou
+./start_backend.sh
 ```
 
-Both builds pass.
+Health check:
 
-## Security Notes
+```bash
+curl http://127.0.0.1:8000/api/health
+```
 
-Do not expose or commit secrets from:
+Frontend:
+
+```bash
+cd lou
+npm install
+npm run dev
+```
+
+Open:
 
 ```text
-.env
-lou/.env
-TUMHL_API_KEY.txt
+http://localhost:5173
 ```
 
-Use `.env.example` as the shareable template.
+## Seed The Demo
+
+The seed script reads the real Siemens file:
+
+```text
+Siemens Sample Documents/Sample NDA Playbook.csv.xlsx
+```
+
+That file has eight columns:
+
+```text
+Clause #, Clause Name, Why It Matters (Summary), Preferred Position,
+Fallback 1, Fallback 2, Red Line, Escalation Trigger
+```
+
+The Excel playbook is parsed directly. No LLM call is needed for those 14 rules.
+
+Run:
+
+```bash
+cd lou
+python scripts/seed_demo.py
+```
+
+The script then processes the sample negotiated NDAs and writes proposed commits into the review queue. Those contract-analysis steps use the configured LLM.
+
+## Demo Flow
+
+1. Seed the app.
+2. Open the Neural Map.
+3. Click a staged rule and inspect its provenance.
+4. Open Review Queue.
+5. Approve or reject one proposed commit with a lawyer note.
+6. Return to the Neural Map and watch the lifecycle ring change.
+7. Ask Lou: `Can we accept unlimited liability?`
+8. Export the Excel workbook.
+
+## Guardrails
+
+- Lou routes LLM calls through `backend/services/llm.py`.
+- Playbook rules live in SQLite; embeddings live in ChromaDB.
+- The evolution pipeline writes `ProposedCommit` records only.
+- Live rule updates go through `POST /api/review/{id}/approve`.
+- Every chat answer returns source citations.
+- Every approved or rejected proposal creates a commit record.
+
+That approval gate is the product. Without it, Lou would just be another AI suggestion box.
+
+## Useful Checks
+
+Frontend:
+
+```bash
+cd lou
+npm run build
+```
+
+Backend import check:
+
+```bash
+cd lou
+PYTHONPATH=. /opt/miniconda3/envs/py311/bin/python -m compileall backend
+```
+
+Parser sanity check:
+
+```bash
+cd lou/backend
+PYTHONPATH=.. /opt/miniconda3/envs/py311/bin/python - <<'PY'
+from backend.services.parser import parse_excel_playbook
+rules = parse_excel_playbook('../../Siemens Sample Documents/Sample NDA Playbook.csv.xlsx')
+print(len(rules), rules[0]['rule_id'], rules[-1]['rule_id'])
+PY
+```
+
+Expected:
+
+```text
+14 type_of_nda signatures_authority
+```
+
+## Secrets
+
+Do not commit real keys.
+
+Ignored files include:
+
+```text
+lou/.env
+TUMHL_API_KEY.txt
+lou/backend/data/
+```
+
+Use `lou/.env.example` as the template.
