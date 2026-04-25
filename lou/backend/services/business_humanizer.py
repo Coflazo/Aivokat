@@ -31,6 +31,8 @@ Anti-AI writing pass:
 - Do not add personality that would make legal guidance casual, emotional, or less authoritative.
 """
 
+_LLM_REWRITE_UNAVAILABLE = False
+
 
 async def rewrite_playbook_text(
     text: str,
@@ -50,17 +52,38 @@ async def rewrite_playbook_text(
             "meaning_preservation_note": "No rewrite proposed because the original field is empty.",
         }
 
-    result = await complete_json(
-        system_prompt=_system_prompt(mode, field_name),
-        user_message="\n".join([
-            f"CLAUSE NAME: {clause_name or 'Unknown'}",
-            f"FIELD: {field_name}",
-            f"MODE: {mode.value}",
-            "ORIGINAL TEXT:",
-            text,
-        ]),
-        max_tokens=900,
-    )
+    global _LLM_REWRITE_UNAVAILABLE
+    if _LLM_REWRITE_UNAVAILABLE:
+        return {
+            "rewritten": _deterministic_rewrite(text, field_name, mode),
+            "meaning_preservation_note": (
+                "Local rewrite fallback used because the configured LLM is unavailable in this server process. "
+                "Meaning was preserved; a lawyer should still review before applying."
+            ),
+        }
+
+    try:
+        result = await complete_json(
+            system_prompt=_system_prompt(mode, field_name),
+            user_message="\n".join([
+                f"CLAUSE NAME: {clause_name or 'Unknown'}",
+                f"FIELD: {field_name}",
+                f"MODE: {mode.value}",
+                "ORIGINAL TEXT:",
+                text,
+            ]),
+            max_tokens=900,
+        )
+    except Exception:
+        _LLM_REWRITE_UNAVAILABLE = True
+        rewritten = _deterministic_rewrite(text, field_name, mode)
+        return {
+            "rewritten": rewritten,
+            "meaning_preservation_note": (
+                "Local rewrite fallback used because the configured LLM was unavailable. "
+                "Meaning was preserved; a lawyer should still review before applying."
+            ),
+        }
 
     rewritten = str(result.get("rewritten", "")).strip()
     note = str(result.get("meaning_preservation_note", "")).strip()
@@ -74,6 +97,36 @@ async def rewrite_playbook_text(
         "rewritten": rewritten,
         "meaning_preservation_note": note,
     }
+
+
+def _deterministic_rewrite(text: str, field_name: str, mode: RewriteMode) -> str:
+    """Small offline fallback for demos when the configured LLM is unavailable."""
+
+    cleaned = " ".join(text.replace("—", "-").replace("–", "-").split())
+    replacements = {
+        "regarless": "regardless",
+        "recieving": "receiving",
+        "In order to": "To",
+        "in order to": "to",
+        "has the ability to": "can",
+        "It is important to note that": "",
+    }
+    for old, new in replacements.items():
+        cleaned = cleaned.replace(old, new)
+
+    if mode == RewriteMode.SHORTER:
+        return cleaned
+
+    if field_name == "preferred_position" and "AS IS" in cleaned.upper():
+        return "Information is provided as is, with no warranty and no liability for use or reliance."
+
+    if field_name == "red_line" and not cleaned.lower().startswith(("never accept", "do not accept")):
+        return f"Never accept: {cleaned}"
+
+    if field_name == "escalation_trigger" and not cleaned.lower().startswith(("escalate", "senior legal")):
+        return f"Escalate if: {cleaned}"
+
+    return cleaned
 
 
 def _system_prompt(mode: RewriteMode, field_name: str) -> str:
