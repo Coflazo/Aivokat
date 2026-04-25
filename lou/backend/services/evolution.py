@@ -4,8 +4,10 @@ from datetime import datetime
 from docx import Document
 import pypdf
 
-from backend.core.schema import ProposedCommit, ChangeType, ApprovalStatus
 from backend.core.database import engine
+from backend.core.config import settings
+from backend.core.schema import ProposedCommit, ChangeType, ApprovalStatus
+from backend.services.clause_classifier import classify_clause_pair
 from backend.services.vector_store import search_rules
 from backend.services.llm import complete_json, complete
 from sqlmodel import Session, select
@@ -63,6 +65,16 @@ def _extract_docx_text(path: str) -> str:
 def _extract_pdf_text(path: str) -> str:
     reader = pypdf.PdfReader(path)
     return "\n".join(page.extract_text() or "" for page in reader.pages)
+
+
+def _document_family(document_name: str) -> str:
+    if document_name.startswith("Sample Standard"):
+        return "standard"
+    if document_name.startswith("A"):
+        return "a_series"
+    if document_name.startswith("B"):
+        return "customer"
+    return "unknown"
 
 
 def _classify_similarity(similarity: float, relationship: str) -> ChangeType:
@@ -136,9 +148,17 @@ async def process_new_contract(
         top_match = matches[0]
         similarity = top_match.get("similarity", 0.0)
 
-        # Determine conflict
         relationship = "NEUTRAL"
-        if similarity >= 0.50:
+        classifier_label, classifier_confidence = classify_clause_pair(
+            clause_text=clause_text,
+            rule_text=top_match.get("document", top_match["standard_position"]),
+            lexical_similarity=similarity,
+            document_family=_document_family(document_name),
+        )
+        if classifier_label is not None and classifier_confidence >= settings.lou_classifier_confidence_threshold:
+            change_type = classifier_label
+            relationship = classifier_label.name
+        elif similarity >= 0.50:
             rel_raw = await complete(
                 system_prompt=CONFLICT_SYSTEM,
                 user_message=CONFLICT_USER.format(
@@ -152,8 +172,9 @@ async def process_new_contract(
             word = rel_raw.strip().upper()
             if word in ("CONTRADICTS", "CONFIRMS", "NEUTRAL"):
                 relationship = word
-
-        change_type = _classify_similarity(similarity, relationship)
+            change_type = _classify_similarity(similarity, relationship)
+        else:
+            change_type = _classify_similarity(similarity, relationship)
 
         # Skip CONFIRMS with high similarity — not interesting enough to propose
         if change_type == ChangeType.CONFIRMS and similarity >= 0.90:

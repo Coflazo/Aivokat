@@ -173,6 +173,59 @@ Expected:
 14 type_of_nda signatures_authority
 ```
 
+## Training The Local ML Models
+
+Lou now has a local training pipeline for the Siemens sample set.
+
+It trains two things:
+
+- a retriever model under `lou/backend/models/lou-retriever/`
+- a clause classifier under `lou/backend/models/clause-classifier/`
+
+Build weak-label training data:
+
+```bash
+cd lou
+PYTHONPATH=. /opt/miniconda3/envs/py311/bin/python scripts/build_training_dataset.py
+```
+
+Train the classifier:
+
+```bash
+cd lou
+PYTHONPATH=. /opt/miniconda3/envs/py311/bin/python scripts/train_clause_classifier.py
+```
+
+Train the retriever:
+
+```bash
+cd lou
+PYTHONPATH=. /opt/miniconda3/envs/py311/bin/python scripts/train_retriever.py
+```
+
+By default the retriever script runs one local training step so the demo does not spend twenty minutes on CPU. For a full epoch:
+
+```bash
+cd lou
+PYTHONPATH=. /opt/miniconda3/envs/py311/bin/python scripts/train_retriever.py --max-steps 0
+```
+
+Evaluate both models:
+
+```bash
+cd lou
+PYTHONPATH=. /opt/miniconda3/envs/py311/bin/python scripts/evaluate_models.py
+```
+
+Rebuild ChromaDB with the trained retriever:
+
+```bash
+cd lou
+PYTHONPATH=. /opt/miniconda3/envs/py311/bin/python scripts/reindex_chroma.py
+```
+
+Training does not change the live playbook. It writes data files, model files, and metrics. The approval gate still controls any change to the `Rule` table.
+
 ## Secrets
 
 Do not commit real keys.

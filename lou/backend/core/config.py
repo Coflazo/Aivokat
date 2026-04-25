@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4o-mini"
     llm_temperature: float = 0.1
     embedding_model: str = "all-mpnet-base-v2"
+    lou_embedding_model_path: str = "./models/lou-retriever"
+    lou_classifier_path: str = "./models/clause-classifier/model.joblib"
+    lou_classifier_confidence_threshold: float = 0.70
+    training_data_dir: str = "./data/training"
     chroma_persist_dir: str = "./data/chroma"
     upload_dir: str = "./data/uploads"
     database_url: str = "sqlite:///./data/lou.db"

@@ -4,9 +4,6 @@ from pathlib import Path
 import openpyxl
 from docx import Document
 
-from backend.services.llm import complete_json
-
-
 EXTRACTION_SYSTEM = """You are a legal knowledge extraction specialist.
 Extract negotiation playbook rules into structured JSON.
 Return only valid JSON."""
@@ -129,6 +126,8 @@ async def parse_playbook(file_path: str, filename: str) -> list[dict]:
 
     all_rules: list[dict] = []
     seen_ids: set[str] = set()
+    from backend.services.llm import complete_json
+
     for chunk in _chunks(content, 12000):
         result = await complete_json(
             EXTRACTION_SYSTEM,
@@ -156,6 +155,8 @@ async def extract_contract_clauses(file_path: str | Path) -> list[dict]:
         text = "\n".join(page.extract_text() or "" for page in reader.pages)
     else:
         raise ValueError(f"Unsupported contract format: {suffix}")
+
+    from backend.services.llm import complete_json
 
     result = await complete_json(
         """You extract individual negotiation clauses from contract documents.

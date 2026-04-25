@@ -1,0 +1,52 @@
+{
+  "classifier": {
+    "rows": 266,
+    "accuracy": 0.6353383458646616,
+    "macro_f1": 0.595719355588232,
+    "classification_report": {
+      "CONFIRMS": {
+        "precision": 0.5894736842105263,
+        "recall": 0.717948717948718,
+        "f1-score": 0.6473988439306358,
+        "support": 78.0
+      },
+      "CONTRADICTS": {
+        "precision": 0.9107142857142857,
+        "recall": 0.49514563106796117,
+        "f1-score": 0.6415094339622641,
+        "support": 103.0
+      },
+      "EXTENDS": {
+        "precision": 0.7846153846153846,
+        "recall": 0.6986301369863014,
+        "f1-score": 0.7391304347826086,
+        "support": 73.0
+      },
+      "NEW_RULE": {
+        "precision": 0.22,
+        "recall": 0.9166666666666666,
+        "f1-score": 0.3548387096774194,
+        "support": 12.0
+      },
+      "accuracy": 0.6353383458646616,
+      "macro avg": {
+        "precision": 0.6262008386350492,
+        "recall": 0.7070977881674118,
+        "f1-score": 0.595719355588232,
+        "support": 266.0
+      },
+      "weighted avg": {
+        "precision": 0.7507497814808854,
+        "recall": 0.6353383458646616,
+        "f1-score": 0.6570946157141438,
+        "support": 266.0
+      }
+    }
+  },
+  "retriever": {
+    "rows": 322,
+    "recall_at_1": 0.5745341614906833,
+    "recall_at_3": 0.7577639751552795,
+    "mrr": 0.6894393822188851
+  }
+}
