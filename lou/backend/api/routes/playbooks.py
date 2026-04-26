@@ -11,6 +11,7 @@ from typing import Any
 
 import openpyxl
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from backend.core.config import settings
@@ -264,6 +265,38 @@ async def update_clause(
         updated_clause=updated,
         draft_diff=draft_diff,
     )
+
+
+class BrainCopilotRequest(BaseModel):
+    instruction: str
+    node_summaries: list[str]
+
+class BrainCopilotResponse(BaseModel):
+    action: str
+    target_clause: str | None = None
+    target_node_id: str | None = None
+    new_text: str | None = None
+    new_node_type: str | None = None
+    explanation: str
+
+@router.post("/{playbook_id}/brain-copilot", response_model=BrainCopilotResponse)
+async def brain_copilot(playbook_id: str, request: BrainCopilotRequest) -> BrainCopilotResponse:
+    from backend.services.llm import complete_json
+    system = (
+        "You are Lou, an AI legal playbook editor. Parse the lawyer's instruction and return JSON with: "
+        "action ('add'|'edit'|'delete'), target_clause (name string or null), target_node_id (string or null), "
+        "new_text (string or null), new_node_type ('preferred'|'fallback_1'|'fallback_2'|'red_line'|'escalation' or null), "
+        "explanation (one plain-English sentence describing the proposed change). "
+        f"Available clause nodes: {', '.join(request.node_summaries[:20])}"
+    )
+    try:
+        result = await complete_json(system, f"Instruction: {request.instruction}")
+        return BrainCopilotResponse(**{k: result.get(k) for k in BrainCopilotResponse.model_fields})
+    except Exception:
+        return BrainCopilotResponse(
+            action="edit",
+            explanation=f"Could not parse: {request.instruction[:80]}"
+        )
 
 
 def _load_playbook_view(playbook_id: str) -> PlaybookApiView:

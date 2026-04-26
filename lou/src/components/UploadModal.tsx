@@ -30,7 +30,7 @@ export function UploadModal({
         saveCurrentPlaybookId(playbookId)
         onPlaybookUploaded?.(playbookId)
       }
-      setMessage(JSON.stringify(result))
+      setMessage(`success:${kind === 'playbook' ? result.playbook?.name ?? 'Playbook' : 'Contract'} uploaded successfully.`)
       onDone()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Upload failed')
@@ -64,7 +64,20 @@ export function UploadModal({
         <button className="reviewButton" type="button" disabled={!file || busy} onClick={() => void submit()} style={{ marginTop: 18 }}>
           {busy ? 'Uploading...' : 'Upload'}
         </button>
-        {message && <p style={{ color: 'var(--muted)', fontSize: 12, overflowWrap: 'anywhere' }}>{message}</p>}
+        {message && (
+          <div style={{
+            marginTop: 14,
+            padding: '10px 14px',
+            borderRadius: 7,
+            background: message.startsWith('success:') ? 'rgba(0,124,121,.08)' : 'rgba(180,40,40,.07)',
+            border: `1px solid ${message.startsWith('success:') ? 'rgba(0,124,121,.25)' : 'rgba(180,40,40,.22)'}`,
+            fontSize: 12,
+            color: message.startsWith('success:') ? 'var(--turquoise)' : 'var(--risk)',
+            lineHeight: 1.5,
+          }}>
+            {message.startsWith('success:') ? `✓ ${message.slice(8)}` : message}
+          </div>
+        )}
       </section>
     </div>
   )

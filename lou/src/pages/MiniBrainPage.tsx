@@ -336,7 +336,10 @@ export function MiniBrainPage(): JSX.Element {
         .filter(n => n.node_type === 'clause')
         .map(n => `${n.id}: ${n.label}`)
       const result = await brainCopilot(playbookId, nlInput, nodeSummaries)
-      setProposedChange(result)
+      setProposedChange({
+        ...result,
+        newNodeType: result.newNodeType as BrainNodeView['node_type'] | undefined,
+      })
     } catch {
       setProposedChange({
         action: 'edit',
