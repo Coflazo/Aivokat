@@ -647,7 +647,8 @@ function ShellInner(): JSX.Element {
   const { user } = useUser()
   const [pendingCount, setPendingCount] = React.useState(0)
   const [refreshKey, setRefreshKey] = React.useState(0)
-  const [currentPlaybookId, setCurrentPlaybookId] = React.useState<string | null>(() => getCurrentPlaybookId())
+  const DEFAULT_PLAYBOOK = 'standard-nda-playbook'
+  const [currentPlaybookId, setCurrentPlaybookId] = React.useState<string | null>(() => getCurrentPlaybookId() ?? DEFAULT_PLAYBOOK)
 
   React.useEffect(() => {
     if (!user) return
@@ -674,7 +675,7 @@ function ShellInner(): JSX.Element {
     <>
       <Nav pendingCount={pendingCount} onUpload={() => {}} currentPlaybookId={currentPlaybookId} />
       <Routes>
-        <Route path="/" element={isPeter ? <PeterHomePage onUploaded={rememberPlaybook} /> : <SuzanneHomePage onPlaybookSelected={rememberPlaybook} />} />
+        <Route path="/" element={isPeter ? <Navigate to="/playbooks/standard-nda-playbook/edit" replace /> : <Navigate to="/mega-brain" replace />} />
         <Route path="/playbooks/:playbookId/edit" element={isPeter ? <PlaybookEditorPage /> : <Navigate to="/mega-brain" replace />} />
         <Route path="/playbooks/:playbookId/analysis" element={isPeter ? <PlaybookAnalysisPage /> : <Navigate to="/mega-brain" replace />} />
         <Route path="/playbooks/:playbookId/brain" element={<MiniBrainPage />} />

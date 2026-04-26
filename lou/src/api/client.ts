@@ -101,8 +101,13 @@ export const uploadApiPlaybook = (
   return api.post('/playbooks/upload', fd).then((r) => r.data)
 }
 
-export const fetchPlaybook = (playbookId: string): Promise<PlaybookApi> =>
-  api.get(`/playbooks/${playbookId}`).then((r) => r.data)
+export const fetchPlaybook = (playbookId: string): Promise<PlaybookApi> => {
+  if (MOCK) {
+    const found = MOCK_ALL_PLAYBOOKS.find(p => p.playbook_id === playbookId) ?? MOCK_ALL_PLAYBOOKS[0]
+    return delay(found, 50)
+  }
+  return api.get(`/playbooks/${playbookId}`).then((r) => r.data)
+}
 
 export const updatePlaybookClause = (
   playbookId: string,

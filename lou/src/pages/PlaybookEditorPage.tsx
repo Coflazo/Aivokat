@@ -1,7 +1,7 @@
 import React from 'react'
-import { ArrowRight, Check, Pencil, RefreshCw, Wand2, X } from 'lucide-react'
+import { ArrowRight, Check, Pencil, RefreshCw, Upload, Wand2, X } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { fetchPlaybook, rewriteCell, rewritePlaybook, updatePlaybookClause } from '../api/client'
+import { fetchPlaybook, rewriteCell, rewritePlaybook, updatePlaybookClause, uploadApiPlaybook } from '../api/client'
 import type { PlaybookApi, PlaybookClause, RewriteCellResponse, RewriteMode } from '../types'
 import { resolvePlaybookId, saveCurrentPlaybookId } from '../utils/currentPlaybook'
 
@@ -38,7 +38,9 @@ export function PlaybookEditorPage(): JSX.Element {
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [rewriting, setRewriting] = React.useState(false)
+  const [uploading, setUploading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const uploadRef = React.useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
     let cancelled = false
@@ -167,6 +169,21 @@ export function PlaybookEditorPage(): JSX.Element {
     }
   }
 
+  async function handleNewUpload(file: File): Promise<void> {
+    setUploading(true)
+    setError(null)
+    try {
+      const result = await uploadApiPlaybook(file, 'Peter', file.name.replace(/\.(xlsx?|csv|docx?)$/i, ''), '')
+      const id = result.playbook.playbook_id
+      saveCurrentPlaybookId(id)
+      navigate(`/playbooks/${id}/edit`, { replace: true })
+    } catch {
+      setError('Upload failed — check the file format.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   const selectedClause = playbook?.clauses.find((clause) => clause.clause_id === selectedClauseId)
 
   return (
@@ -177,6 +194,34 @@ export function PlaybookEditorPage(): JSX.Element {
           <h1>{playbook?.name ?? 'Playbook editor'}</h1>
         </div>
         <div className="topbarActions">
+          <input
+            ref={uploadRef}
+            type="file"
+            accept=".csv,.xlsx,.xls,.docx,.doc,.pdf"
+            style={{ display: 'none' }}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleNewUpload(f); e.target.value = '' }}
+          />
+          <button
+            className="secondaryAction"
+            type="button"
+            disabled={uploading}
+            onClick={() => uploadRef.current?.click()}
+            title="Upload a new playbook to replace the current one"
+          >
+            <Upload size={14} />
+            {uploading ? 'Uploading…' : 'New playbook'}
+          </button>
+          {playbook && (
+            <button
+              className="secondaryAction"
+              type="button"
+              onClick={() => { setPlaybook(null); setSelectedClauseId(null); setEditing(null); setError(null) }}
+              title="Clear the current table"
+            >
+              <X size={14} />
+              Clear
+            </button>
+          )}
           <label>
             Editor
             <input value={editedBy} onChange={(event) => setEditedBy(event.target.value)} />

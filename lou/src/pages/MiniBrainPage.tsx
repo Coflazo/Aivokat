@@ -295,9 +295,9 @@ export function MiniBrainPage(): JSX.Element {
     const graph = graphRef.current
     if (!graph || !brain) return
 
-    graph.d3Force('charge')?.strength(-500)
+    graph.d3Force('charge')?.strength(-800)
     graph.d3Force('link')?.distance((link: any) =>
-      link.relationship === 'playbook_hierarchy' ? 120 : 80
+      link.relationship === 'playbook_hierarchy' ? 200 : 120
     )
 
     // Build clause → children map for cohesion force
@@ -344,7 +344,7 @@ export function MiniBrainPage(): JSX.Element {
     const rect = el.getBoundingClientRect()
     if (rect.width > 0 && rect.height > 0) setDims({ w: rect.width, h: rect.height })
     // Fit graph to view — let simulation run first, then zoom to fit
-    const t = setTimeout(() => { graphRef.current?.zoomToFit(400, 60) }, 600)
+    const t = setTimeout(() => { graphRef.current?.zoomToFit(400, 60) }, 200)
     return () => { ro.disconnect(); clearTimeout(t) }
   }, [brain, loading])
 
@@ -520,15 +520,17 @@ export function MiniBrainPage(): JSX.Element {
         </div>
       </section>
 
-      {!loading && !brain && (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)' }}>
-          <p style={{ fontSize: 13 }}>Select or upload a playbook to view the brain.</p>
-        </div>
-      )}
-
-      {!loading && brain && (
-        <section className="miniBrainLayout pageEnter">
-          <div className="miniBrainCanvas" ref={containerRef} aria-label="Mini brain graph">
+      <section className="miniBrainLayout pageEnter">
+          <div className="miniBrainCanvas" ref={containerRef} aria-label="Mini brain graph" style={{ position: 'relative' }}>
+            {loading && (
+              <div style={{
+                position: 'absolute', inset: 0, display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+                zIndex: 10, pointerEvents: 'none',
+              }}>
+                <BrainLoader label="Loading mini brain…" />
+              </div>
+            )}
             <ForceGraph2D<BrainNodeView, BrainEdgeView>
               ref={graphRef}
               graphData={graphData}
@@ -560,9 +562,10 @@ export function MiniBrainPage(): JSX.Element {
               }}
               onNodeClick={(node) => handleNodeClick(node as BrainNodeView)}
               onBackgroundClick={() => { setSelected(null); setCitation(null) }}
-              cooldownTicks={160}
-              d3AlphaDecay={0.012}
-              d3VelocityDecay={0.22}
+              warmupTicks={100}
+              cooldownTicks={150}
+              d3AlphaDecay={0.020}
+              d3VelocityDecay={0.28}
               autoPauseRedraw={false}
               linkDirectionalParticles={(link) => {
                 const l = link as BrainEdgeView
@@ -1009,7 +1012,6 @@ export function MiniBrainPage(): JSX.Element {
             </section>
           </aside>
         </section>
-      )}
 
       {tooltip && (
         <div className="nodeTooltip" style={{ left: tooltip.x, top: tooltip.y }}>
@@ -1032,8 +1034,24 @@ function drawMiniNode(
   const isClause = node.node_type === 'clause'
   const isMatched = matchedIdsRef.current.has(node.id) || matchedIdsRef.current.has(node.clause?.clause_id ?? '')
   const isSelected = selected?.id === node.id
+  // Child of selected clause: node id starts with selected clause id + ':'
+  const isChildOfSelected = !isClause && selected?.node_type === 'clause' && node.id.startsWith(selected.id + ':')
   const radius = NODE_TYPE_SIZE[node.node_type] ?? 4.5
   const color = NODE_TYPE_COLORS[node.node_type] ?? '#007c79'
+
+  // Child-of-selected animated glow ring
+  if (isChildOfSelected) {
+    const pulse = 0.3 + 0.3 * Math.sin(Date.now() / 350)
+    ctx.beginPath()
+    ctx.arc(x, y, radius + 6, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(0,153,153,${pulse * 0.35})`
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(x, y, radius + 3, 0, Math.PI * 2)
+    ctx.strokeStyle = `rgba(0,153,153,${pulse})`
+    ctx.lineWidth = 1.8 / scale
+    ctx.stroke()
+  }
 
   // Issue/warning pulse ring for clause nodes
   if (isClause && node.status !== 'clean') {

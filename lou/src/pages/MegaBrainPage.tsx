@@ -54,12 +54,20 @@ function buildGraph(brain: MegaBrain): { nodes: GraphNode[]; links: GraphEdge[] 
     islandLabelMap.set(island.playbook_id, `${island.name} v${island.playbook_version}`)
   })
 
+  // Pre-assign island ring positions so warmupTicks starts with nodes already separated
+  const count = brain.islands.length
+  const ringR = count <= 2 ? 320 : count <= 5 ? 480 : 650
+  const islandPosMap = new Map<string, { x: number; y: number }>()
+  brain.islands.forEach((island, i) => {
+    const angle = (i / count) * Math.PI * 2 - Math.PI / 2
+    islandPosMap.set(island.playbook_id, { x: Math.cos(angle) * ringR, y: Math.sin(angle) * ringR })
+  })
+
   const nodes: GraphNode[] = brain.nodes.map(n => {
     const islandKey = n.island_id ?? ''
     const islandColor = islandColorMap.get(islandKey) ?? '#9b6f43'
     const playbookLabel = islandLabelMap.get(islandKey) ?? islandKey
 
-    // Use type-specific color for hierarchy nodes; island color for clause nodes
     let nodeColor: string
     if (n.node_type === 'clause') {
       nodeColor = n.status === 'issue' ? '#4a2430' : n.status === 'warning' ? '#ec6602' : islandColor
@@ -67,7 +75,9 @@ function buildGraph(brain: MegaBrain): { nodes: GraphNode[]; links: GraphEdge[] 
       nodeColor = NODE_TYPE_COLOR[n.node_type] ?? n.color ?? islandColor
     }
 
-    return { ...n, islandColor, playbookLabel, color: nodeColor }
+    const pos = islandPosMap.get(islandKey)
+    const jitter = () => (Math.random() - 0.5) * 60
+    return { ...n, islandColor, playbookLabel, color: nodeColor, x: pos ? pos.x + jitter() : undefined, y: pos ? pos.y + jitter() : undefined }
   })
 
   const links: GraphEdge[] = (brain.edges as BrainEdgeView[]).map(e => ({
@@ -135,7 +145,7 @@ export function MegaBrainPage(): JSX.Element {
     ro.observe(el)
     const rect = el.getBoundingClientRect()
     if (rect.width > 0 && rect.height > 0) setDims({ w: rect.width, h: rect.height })
-    const t = setTimeout(() => { graphRef.current?.zoomToFit(500, 80) }, 800)
+    const t = setTimeout(() => { graphRef.current?.zoomToFit(400, 30) }, 200)
     return () => { ro.disconnect(); clearTimeout(t) }
   }, [graph, loading])
 
@@ -145,7 +155,7 @@ export function MegaBrainPage(): JSX.Element {
     if (!g || !megaBrain || megaBrain.islands.length === 0) return
 
     const count = megaBrain.islands.length
-    const ringR = count <= 2 ? 300 : count <= 5 ? 450 : 580
+    const ringR = count <= 2 ? 320 : count <= 5 ? 480 : 650
     const targetPos = new Map<string, { x: number; y: number }>()
     megaBrain.islands.forEach((island, i) => {
       const angle = (i / count) * Math.PI * 2 - Math.PI / 2
@@ -156,15 +166,15 @@ export function MegaBrainPage(): JSX.Element {
       for (const node of (g.graphData()?.nodes ?? [])) {
         const t = targetPos.get((node as any).island_id ?? '')
         if (!t) continue
-        node.vx = (node.vx ?? 0) + (t.x - (node.x ?? 0)) * alpha * 0.13
-        node.vy = (node.vy ?? 0) + (t.y - (node.y ?? 0)) * alpha * 0.13
+        node.vx = (node.vx ?? 0) + (t.x - (node.x ?? 0)) * alpha * 0.15
+        node.vy = (node.vy ?? 0) + (t.y - (node.y ?? 0)) * alpha * 0.15
       }
     }
     ;(islandRingForce as any).initialize = (): void => {}
     g.d3Force('islandRing', islandRingForce)
-    g.d3Force('charge')?.strength(-120)
+    g.d3Force('charge')?.strength(-350)
     g.d3Force('link')?.distance((link: any) =>
-      link.edge_scope === 'cross_island' ? 600 : 30
+      link.edge_scope === 'cross_island' ? 700 : 60
     )
     g.d3ReheatSimulation()
     return () => { g.d3Force('islandRing', null) }
@@ -296,9 +306,10 @@ export function MegaBrainPage(): JSX.Element {
                   setTooltip(null)
                 }}
                 onBackgroundClick={() => { setSelected(null); setHighlightedIsland(null) }}
+                warmupTicks={120}
                 cooldownTicks={200}
-                d3AlphaDecay={0.010}
-                d3VelocityDecay={0.24}
+                d3AlphaDecay={0.018}
+                d3VelocityDecay={0.28}
                 autoPauseRedraw={false}
                 linkDirectionalParticles={link => {
                   const l = link as GraphEdge & { edge_scope?: string }
@@ -399,17 +410,25 @@ export function MegaBrainPage(): JSX.Element {
             {/* Node type legend */}
             <div>
               <p className="panelKicker">Node types</p>
-              <div className="megaBrainLegend">
+              <div className="megaBrainLegend" style={{ flexDirection: 'column', gap: 5 }}>
                 {[
-                  { color: 'var(--turquoise)', label: 'Clause / Preferred' },
-                  { color: '#9b6f43', label: 'Fallback 1' },
-                  { color: '#b98546', label: 'Fallback 2' },
-                  { color: '#4a2430', label: 'Red line' },
-                  { color: '#ec6602', label: 'Escalation' },
+                  { color: '#007c79', label: 'Clause', shape: 'circle' },
+                  { color: '#007c79', label: 'Preferred', shape: 'ring' },
+                  { color: '#9b6f43', label: 'Fallback 1', shape: 'diamond' },
+                  { color: '#b98546', label: 'Fallback 2', shape: 'square' },
+                  { color: '#4a2430', label: 'Red line', shape: 'danger' },
+                  { color: '#ec6602', label: 'Escalation', shape: 'triangle' },
                 ].map(l => (
                   <div key={l.label} className="megaBrainLegendItem">
-                    <div className="megaBrainLegendDot" style={{ background: l.color }} />
-                    {l.label}
+                    <svg width="14" height="14" viewBox="0 0 14 14" style={{ flexShrink: 0 }}>
+                      {l.shape === 'circle' && <circle cx="7" cy="7" r="5" fill={l.color} />}
+                      {l.shape === 'ring' && <><circle cx="7" cy="7" r="5" fill={l.color} /><circle cx="7" cy="7" r="3.2" stroke="rgba(255,255,255,0.4)" strokeWidth="1.2" fill="none" /></>}
+                      {l.shape === 'diamond' && <polygon points="7,1 13,7 7,13 1,7" fill={l.color} />}
+                      {l.shape === 'square' && <rect x="2" y="2" width="10" height="10" fill={l.color} />}
+                      {l.shape === 'danger' && <><circle cx="7" cy="7" r="5" fill={l.color} /><circle cx="7" cy="7" r="6" stroke="rgba(180,40,40,0.7)" strokeWidth="1.5" fill="none" /></>}
+                      {l.shape === 'triangle' && <polygon points="7,1 13,13 1,13" fill={l.color} />}
+                    </svg>
+                    <span style={{ fontSize: 11 }}>{l.label}</span>
                   </div>
                 ))}
               </div>
@@ -442,7 +461,6 @@ export function MegaBrainPage(): JSX.Element {
             )}
           </aside>
         </section>
-      )}
 
       {tooltip && (
         <div className="nodeTooltip" style={{ left: tooltip.x, top: tooltip.y }}>
@@ -509,19 +527,34 @@ function drawMegaNode(
     ctx.stroke()
   }
 
-  // Main dot
-  ctx.beginPath()
-  ctx.arc(x, y, r, 0, Math.PI * 2)
-  ctx.fillStyle = node.color
+  // Draw shape by node type
   ctx.globalAlpha = isDimmed ? 0.18 : 0.92
-  ctx.fill()
+  if (node.node_type === 'clause') {
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = node.color; ctx.fill()
+  } else if (node.node_type === 'preferred') {
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = node.color; ctx.fill()
+    ctx.beginPath(); ctx.arc(x, y, r - 1, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1; ctx.stroke()
+  } else if (node.node_type === 'fallback_1') {
+    ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath()
+    ctx.fillStyle = node.color; ctx.fill()
+  } else if (node.node_type === 'fallback_2') {
+    const s = r * 0.9; ctx.beginPath(); ctx.rect(x - s, y - s, s * 2, s * 2); ctx.fillStyle = node.color; ctx.fill()
+  } else if (node.node_type === 'red_line') {
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = node.color; ctx.fill()
+    ctx.beginPath(); ctx.arc(x, y, r + 1.5, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(180,40,40,0.7)'; ctx.lineWidth = 1.5 / scale; ctx.stroke()
+  } else if (node.node_type === 'escalation') {
+    ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r * 0.87, y + r * 0.5); ctx.lineTo(x - r * 0.87, y + r * 0.5); ctx.closePath()
+    ctx.fillStyle = node.color; ctx.fill()
+  } else {
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = node.color; ctx.fill()
+  }
   ctx.globalAlpha = 1
 
   // Label for clause nodes (or all at high zoom)
   const showLabel = isClause || scale > 1.8
   if (!showLabel || isDimmed) return
   ctx.font = `${(isClause ? 9.5 : 7.5) / scale}px Inter, sans-serif`
-  ctx.fillStyle = isDimmed ? 'rgba(47,42,34,.3)' : '#31291f'
+  ctx.fillStyle = '#31291f'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
   ctx.fillText(node.label, x, y + r + 3.5 / scale)
