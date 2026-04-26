@@ -23,6 +23,21 @@ import type {
   RewriteRowResponse,
   SuggestRewriteResponse
 } from '../types'
+import {
+  MOCK_ALL_PLAYBOOKS,
+  MOCK_BRAIN,
+  MOCK_CONTRACT_ANALYSIS,
+  MOCK_MEGA_BRAIN,
+  MOCK_PUBLIC_PLAYBOOKS,
+  MOCK_PUBLISH_RESPONSE,
+  MOCK_UPLOAD_RESPONSE,
+} from './mockData'
+
+// ─── Mock flag — set false to use real backend ─────────────────────────────
+const MOCK = true
+function delay<T>(val: T, ms = 600): Promise<T> {
+  return new Promise(resolve => setTimeout(() => resolve(val), ms))
+}
 
 const api = axios.create({ baseURL: 'http://localhost:8000/api' })
 
@@ -74,6 +89,7 @@ export const uploadApiPlaybook = (
   name: string,
   description = ''
 ): Promise<PlaybookUploadResponse> => {
+  if (MOCK) return delay(MOCK_UPLOAD_RESPONSE(name, owner) as PlaybookUploadResponse, 900)
   const fd = new FormData()
   fd.append('file', file)
   fd.append('owner', owner)
@@ -142,27 +158,35 @@ export const acceptIssueFix = (issueId: number): Promise<PlaybookApi> =>
 export const rejectIssue = (issueId: number): Promise<PlaybookApi> =>
   api.post(`/analysis/issues/${issueId}/reject`).then((r) => r.data)
 
-export const fetchPlaybookBrain = (playbookId: string): Promise<PlaybookBrain> =>
-  api.get(`/playbooks/${playbookId}/brain`).then((r) => r.data)
+export const fetchPlaybookBrain = (playbookId: string): Promise<PlaybookBrain> => {
+  if (MOCK) return delay({ ...MOCK_BRAIN, playbook_id: playbookId }, 700)
+  return api.get(`/playbooks/${playbookId}/brain`).then((r) => r.data)
+}
 
 export const publishPlaybook = (
   playbookId: string,
   committedBy: string,
   comment: string
-): Promise<PublishPlaybookResponse> =>
-  api.post(`/playbooks/${playbookId}/publish`, {
+): Promise<PublishPlaybookResponse> => {
+  if (MOCK) return delay(MOCK_PUBLISH_RESPONSE(playbookId), 800)
+  return api.post(`/playbooks/${playbookId}/publish`, {
     committed_by: committedBy,
     comment,
   }).then((r) => r.data)
+}
 
-export const fetchMegaBrain = (): Promise<MegaBrain> =>
-  api.get('/mega-brain').then((r) => r.data)
+export const fetchMegaBrain = (): Promise<MegaBrain> => {
+  if (MOCK) return delay(MOCK_MEGA_BRAIN, 600)
+  return api.get('/mega-brain').then((r) => r.data)
+}
 
 export const searchMegaBrain = (q: string): Promise<MegaBrainSearchResult[]> =>
   api.get('/mega-brain/search', { params: { q } }).then((r) => r.data)
 
-export const fetchPublicPlaybooks = (): Promise<PublicPlaybookListItem[]> =>
-  api.get('/public/playbooks').then((r) => r.data)
+export const fetchPublicPlaybooks = (): Promise<PublicPlaybookListItem[]> => {
+  if (MOCK) return delay(MOCK_PUBLIC_PLAYBOOKS, 400)
+  return api.get('/public/playbooks').then((r) => r.data)
+}
 
 export const fetchPublicPlaybookSchema = (playbookId: string): Promise<PlaybookApi> =>
   api.get(`/public/playbooks/${playbookId}/schema`).then((r) => r.data)
@@ -182,13 +206,15 @@ export const matchPublicClause = (
 
 export const analyzePublicContractText = (
   playbookId: string,
-  text: string,
-  sourceFilename = 'pasted-contract.txt'
-): Promise<AnalyzeContractResponse> =>
-  api.post(`/public/playbooks/${playbookId}/analyze-contract`, {
-    text,
-    source_filename: sourceFilename,
+  _text: string,
+  _sourceFilename = 'pasted-contract.txt'
+): Promise<AnalyzeContractResponse> => {
+  if (MOCK) return delay({ ...MOCK_CONTRACT_ANALYSIS, playbook_id: playbookId }, 1200)
+  return api.post(`/public/playbooks/${playbookId}/analyze-contract`, {
+    text: _text,
+    source_filename: _sourceFilename,
   }).then((r) => r.data)
+}
 
 export const suggestPublicRewrite = (
   playbookId: string,
@@ -219,9 +245,66 @@ export const uploadContract = (file: File, lawyerName: string) => {
 
 export const analyzePublicContractFile = (
   playbookId: string,
-  file: File
+  _file: File
 ): Promise<AnalyzeContractResponse> => {
+  if (MOCK) return delay({ ...MOCK_CONTRACT_ANALYSIS, playbook_id: playbookId }, 1200)
   const fd = new FormData()
-  fd.append('file', file)
+  fd.append('file', _file)
   return api.post(`/public/playbooks/${playbookId}/analyze-contract-file`, fd).then((r) => r.data)
+}
+
+export const fetchAllPlaybooks = (): Promise<PlaybookApi[]> => {
+  if (MOCK) return delay(MOCK_ALL_PLAYBOOKS, 400)
+  return api.get('/playbooks').then((r) => r.data)
+}
+
+// ─── Brain Copilot ─────────────────────────────────────────────────────────
+export const brainCopilot = async (
+  playbookId: string,
+  instruction: string,
+  nodeSummaries: string[],
+): Promise<{
+  action: 'add' | 'edit' | 'delete'
+  targetNodeId?: string
+  targetClause?: string
+  newText?: string
+  newNodeType?: string
+  explanation: string
+}> => {
+  if (MOCK) {
+    await delay(null, 900)
+    const lower = instruction.toLowerCase()
+    const ACTION = (lower.includes('delete') || lower.includes('remove')) ? 'delete' as const
+      : (lower.includes('add') || lower.includes('create') || lower.includes('new')) ? 'add' as const
+      : 'edit' as const
+    const matched = nodeSummaries.find(s =>
+      lower.split(/\s+/).some(w => w.length > 3 && s.toLowerCase().includes(w))
+    )
+    const [nodeId, ...rest] = (matched ?? '').split(': ')
+    const clauseName = rest.join(': ')
+    return {
+      action: ACTION,
+      targetNodeId: ACTION !== 'add' ? nodeId : undefined,
+      targetClause: clauseName || undefined,
+      newNodeType: ACTION === 'add' ? 'escalation' : undefined,
+      newText: ACTION === 'edit' ? instruction : undefined,
+      explanation: ACTION === 'delete'
+        ? `Remove "${clauseName || 'selected node'}" from the playbook brain.`
+        : ACTION === 'add'
+          ? `Add an escalation trigger based on: "${instruction.slice(0, 60)}…"`
+          : `Update "${clauseName || 'clause'}" to reflect: "${instruction.slice(0, 60)}…"`,
+    }
+  }
+  const r = await api.post(`/playbooks/${playbookId}/brain-copilot`, {
+    instruction,
+    node_summaries: nodeSummaries,
+  })
+  return {
+    action: r.data.action,
+    targetNodeId: r.data.target_node_id ?? undefined,
+    targetClause: r.data.target_clause ?? undefined,
+    newNodeType: r.data.new_node_type ?? undefined,
+    newText: r.data.new_text ?? undefined,
+    explanation: r.data.explanation,
+  }
 }

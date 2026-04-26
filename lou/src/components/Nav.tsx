@@ -1,5 +1,5 @@
 import React from 'react'
-import { BrainCircuit, ClipboardList, Download, FileSpreadsheet, History, MessageCircle, Network, SearchCode, Upload, UserRoundCog } from 'lucide-react'
+import { BrainCircuit, ClipboardList, Download, FileSpreadsheet, History, MessageCircle, Network, Upload, UserRoundCog } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { exportExcel } from '../api/client'
@@ -35,8 +35,12 @@ export function Nav({
   const { user, setUser } = useUser()
   const activePlaybookPath = currentPlaybookId ? `/playbooks/${currentPlaybookId}` : '/playbooks/current'
 
+  // Derive playbook name from path for the logo subtitle
+  const activePlaybookShort = currentPlaybookId
+    ? currentPlaybookId.slice(0, 10)
+    : null
+
   const peterItems: NavItem[] = [
-    { to: '/', label: 'Upload', icon: Upload },
     { to: `${activePlaybookPath}/edit`, label: 'Editor', icon: FileSpreadsheet },
     { to: `${activePlaybookPath}/brain`, label: 'Brain', icon: Network },
     { to: '/mega-brain', label: 'Mega', icon: BrainCircuit },
@@ -67,15 +71,39 @@ export function Nav({
       alignItems: 'stretch',
       paddingTop: 16,
     }}>
-      <button
-        type="button"
-        onClick={onUpload}
-        title="Upload"
-        style={{ ...itemStyle, border: 0, background: 'transparent', cursor: 'pointer' }}
+      {/* Lou wordmark as home link */}
+      <NavLink
+        to="/"
+        style={{ textDecoration: 'none', border: 0, background: 'transparent' }}
       >
-        <SearchCode size={19} />
-        Lou
-      </button>
+        <div style={{
+          display: 'grid',
+          gap: 2,
+          justifyItems: 'center',
+          padding: '10px 6px 8px',
+        }}>
+          <span style={{
+            fontFamily: "'Cedarville Cursive', cursive",
+            fontSize: 26,
+            color: 'var(--ink)',
+            lineHeight: 1,
+            letterSpacing: '-0.01em',
+          }}>
+            Lou
+          </span>
+          <span style={{
+            fontSize: 9,
+            color: 'var(--muted)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: 68,
+            textAlign: 'center',
+          }}>
+            {activePlaybookShort ?? '—'}
+          </span>
+        </div>
+      </NavLink>
 
       {user && (
         <div style={{ display: 'grid', placeItems: 'center', gap: 2, padding: '6px 4px', marginBottom: 4 }}>

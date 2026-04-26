@@ -13,15 +13,15 @@ import { CommitHistoryScreen } from './components/CommitHistoryScreen'
 import { Nav } from './components/Nav'
 import { RoleSelect } from './components/RoleSelect'
 import { ReviewQueueScreen } from './components/ReviewQueueScreen'
-import { UploadModal } from './components/UploadModal'
 import { UserProvider, useUser } from './contexts/UserContext'
 import {
   ApiConsolePage,
   MegaBrainPage,
   MiniBrainPage,
+  PeterHomePage,
   PlaybookAnalysisPage,
   PlaybookEditorPage,
-  UploadPlaybookPage
+  SuzanneHomePage,
 } from './pages'
 import { sourcePlaybookRows, type SourcePlaybookRow } from './playbookData'
 import type { GraphData as ApiGraphData, GraphNode as ApiGraphNode } from './types'
@@ -646,7 +646,6 @@ function App(): JSX.Element {
 function ShellInner(): JSX.Element {
   const { user } = useUser()
   const [pendingCount, setPendingCount] = React.useState(0)
-  const [uploadOpen, setUploadOpen] = React.useState(false)
   const [refreshKey, setRefreshKey] = React.useState(0)
   const [currentPlaybookId, setCurrentPlaybookId] = React.useState<string | null>(() => getCurrentPlaybookId())
 
@@ -673,16 +672,9 @@ function ShellInner(): JSX.Element {
 
   return (
     <>
-      <Nav pendingCount={pendingCount} onUpload={() => setUploadOpen(true)} currentPlaybookId={currentPlaybookId} />
-      {isPeter && uploadOpen && (
-        <UploadModal
-          onClose={() => setUploadOpen(false)}
-          onDone={markChanged}
-          onPlaybookUploaded={rememberPlaybook}
-        />
-      )}
+      <Nav pendingCount={pendingCount} onUpload={() => {}} currentPlaybookId={currentPlaybookId} />
       <Routes>
-        <Route path="/" element={isPeter ? <UploadPlaybookPage onUploaded={rememberPlaybook} /> : <Navigate to="/mega-brain" replace />} />
+        <Route path="/" element={isPeter ? <PeterHomePage onUploaded={rememberPlaybook} /> : <SuzanneHomePage onPlaybookSelected={rememberPlaybook} />} />
         <Route path="/playbooks/:playbookId/edit" element={isPeter ? <PlaybookEditorPage /> : <Navigate to="/mega-brain" replace />} />
         <Route path="/playbooks/:playbookId/analysis" element={isPeter ? <PlaybookAnalysisPage /> : <Navigate to="/mega-brain" replace />} />
         <Route path="/playbooks/:playbookId/brain" element={<MiniBrainPage />} />
@@ -692,7 +684,7 @@ function ShellInner(): JSX.Element {
         <Route path="/chat" element={<ChatScreen />} />
         <Route path="/history" element={isPeter ? <CommitHistoryScreen /> : <Navigate to="/mega-brain" replace />} />
         <Route path="/review-queue" element={isPeter ? <ReviewQueueScreen onReviewed={markChanged} /> : <Navigate to="/mega-brain" replace />} />
-        <Route path="*" element={<Navigate to={isPeter ? '/' : '/mega-brain'} replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
   )

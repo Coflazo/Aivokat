@@ -1,6 +1,8 @@
 export { ApiConsolePage } from './ApiConsolePage'
 export { MegaBrainPage } from './MegaBrainPage'
 export { MiniBrainPage } from './MiniBrainPage'
+export { PeterHomePage } from './PeterHomePage'
 export { PlaybookAnalysisPage } from './PlaybookAnalysisPage'
 export { PlaybookEditorPage } from './PlaybookEditorPage'
+export { SuzanneHomePage } from './SuzanneHomePage'
 export { UploadPlaybookPage } from './UploadPlaybookPage'

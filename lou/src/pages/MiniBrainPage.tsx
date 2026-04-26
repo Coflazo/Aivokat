@@ -1,12 +1,52 @@
 import React from 'react'
 import ForceGraph2D, { type LinkObject, type NodeObject } from 'react-force-graph-2d'
-import { GitCommit, Send, Upload, X } from 'lucide-react'
+import { GitCommit, Pencil, Plus, Send, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { fetchPlaybookBrain, publishPlaybook, analyzePublicContractFile } from '../api/client'
+import { fetchPlaybookBrain, publishPlaybook, analyzePublicContractFile, analyzePublicContractText, brainCopilot } from '../api/client'
 import { BrainLoader } from '../components/BrainLoader'
 import type { AnalyzeContractResponse, AnalyzedContractClause, BrainEdgeView, BrainNodeView, PlaybookBrain } from '../types'
 import { resolvePlaybookId, saveCurrentPlaybookId } from '../utils/currentPlaybook'
 import { useUser } from '../contexts/UserContext'
+
+interface ProposedBrainChange {
+  action: 'add' | 'edit' | 'delete'
+  targetNodeId?: string | null
+  targetClause?: string | null
+  newText?: string | null
+  newNodeType?: BrainNodeView['node_type'] | null
+  explanation: string
+}
+
+const DEMO_CONTRACT_TEXT = `MUTUAL NON-DISCLOSURE AGREEMENT
+
+This Agreement is entered into as of January 15, 2024, between TechCorp GmbH and Acme Industries AG.
+
+1. DEFINITION OF CONFIDENTIAL INFORMATION
+"Confidential Information" means any non-public technical, business or financial information disclosed by one party to the other, whether in writing, orally, or electronically, including trade secrets, product roadmaps, source code, customer lists, pricing data, and know-how.
+
+2. OBLIGATIONS OF RECEIVING PARTY
+The Receiving Party shall: (a) hold all Confidential Information in strict confidence; (b) not disclose it to any third party without prior written consent; (c) use it solely to evaluate a potential business relationship; (d) apply at least the same security measures it uses for its own confidential data, but no less than reasonable care.
+
+3. PERMITTED RECIPIENTS
+Confidential Information may be shared only with employees, contractors, legal counsel and financial advisors who have a strict need-to-know and are bound by written confidentiality obligations at least as restrictive as those herein.
+
+4. TERM AND TERMINATION
+This Agreement is effective on the date signed and continues for three (3) years. Either party may terminate with 30 days written notice. Confidentiality obligations survive termination for five (5) years.
+
+5. RETURN OR DESTRUCTION
+Upon request or termination, the Receiving Party shall promptly return or permanently destroy all Confidential Information, including copies and extracts, and certify destruction in writing within 10 business days.
+
+6. INTELLECTUAL PROPERTY AND OWNERSHIP
+No license or intellectual property rights are granted. All Confidential Information remains the exclusive property of the Disclosing Party. Nothing herein transfers ownership of any patents, trademarks, or copyrights.
+
+7. GOVERNING LAW AND DISPUTE RESOLUTION
+This Agreement is governed by the laws of Germany. Disputes shall first be submitted to mediation, then to binding arbitration under ICC rules in Munich, Germany.
+
+8. LIABILITY AND REMEDIES
+The parties acknowledge that breach would cause irreparable harm entitling the Disclosing Party to seek injunctive relief without bond. Aggregate liability under this Agreement shall not exceed EUR 50,000.
+
+9. GENERAL PROVISIONS
+This Agreement is the entire agreement between the parties regarding its subject matter and supersedes all prior oral and written agreements. It may not be amended except in writing signed by both parties.`
 
 const NODE_TYPE_COLORS: Record<string, string> = {
   clause:     '#007c79',
@@ -33,6 +73,7 @@ export function MiniBrainPage(): JSX.Element {
   const { user } = useUser()
   const containerRef = React.useRef<HTMLDivElement>(null)
   const graphRef = React.useRef<any>(null)
+  const globalScaleRef = React.useRef(1)
   const [dims, setDims] = React.useState({ w: 800, h: 600 })
   const [brain, setBrain] = React.useState<PlaybookBrain | null>(null)
   const [selected, setSelected] = React.useState<BrainNodeView | null>(null)
@@ -56,6 +97,14 @@ export function MiniBrainPage(): JSX.Element {
   const [uploading, setUploading] = React.useState(false)
   const contractFileRef = React.useRef<HTMLInputElement>(null)
   const circleAnimRef = React.useRef<number>(0)
+
+  // Brain editing (Peter only)
+  const [editMode, setEditMode] = React.useState(false)
+  const [editLabel, setEditLabel] = React.useState('')
+  const [editText, setEditText] = React.useState('')
+  const [nlInput, setNlInput] = React.useState('')
+  const [nlProcessing, setNlProcessing] = React.useState(false)
+  const [proposedChange, setProposedChange] = React.useState<ProposedBrainChange | null>(null)
 
   // Refs so onRenderFramePre never has a stale closure
   const contractAnalysisRef = React.useRef<AnalyzeContractResponse | null>(null)
@@ -81,14 +130,13 @@ export function MiniBrainPage(): JSX.Element {
   React.useEffect(() => {
     const graph = graphRef.current
     if (!graph || !contractAnalysis) return
-    const cx = dims.w / 2
-    const cy = dims.h / 2
-    const R = Math.min(dims.w, dims.h) * 0.41
+    // Graph-space: D3 simulation centers nodes around (0,0)
+    const R = Math.min(dims.w, dims.h) * 0.41 / (globalScaleRef.current || 1)
 
     function contractForce(alpha: number): void {
       for (const node of (graph.graphData()?.nodes ?? [])) {
-        const nx = (node.x ?? cx) - cx
-        const ny = (node.y ?? cy) - cy
+        const nx = node.x ?? 0
+        const ny = node.y ?? 0
         const dist = Math.sqrt(nx * nx + ny * ny) || 1
         if (matchedIdsRef.current.has(node.id)) {
           const pull = ((dist - R) / dist) * alpha * 0.22
@@ -142,7 +190,7 @@ export function MiniBrainPage(): JSX.Element {
       setCitation(null)
       setSelected(null)
     } catch {
-      setMessage('Contract analysis failed — make sure this playbook is published.')
+      setMessage('Contract analysis failed — check that the file is a valid PDF, DOCX or TXT.')
     } finally {
       setUploading(false)
     }
@@ -159,6 +207,14 @@ export function MiniBrainPage(): JSX.Element {
     graphRef.current?.d3Force('contractCircle', null)
     graphRef.current?.d3ReheatSimulation()
   }
+
+  // Memoize graphData so ForceGraph2D never gets a new object reference on
+  // unrelated state changes (contract upload, selection, etc.), which would
+  // restart the D3 simulation and scatter all nodes back to the origin.
+  const graphData = React.useMemo(
+    () => brain ? { nodes: brain.nodes, links: brain.edges } : { nodes: [], links: [] },
+    [brain],
+  )
 
   // Brain load
   React.useEffect(() => {
@@ -213,8 +269,112 @@ export function MiniBrainPage(): JSX.Element {
     }
   }
 
+  // ─── Brain editing ────────────────────────────────────────────────────────
+  function startEditing(node: BrainNodeView): void {
+    setEditMode(true)
+    setEditLabel(node.label)
+    setEditText(node.text ?? '')
+  }
+
+  function saveNodeEdit(): void {
+    if (!selected) return
+    setBrain(prev => prev ? {
+      ...prev,
+      nodes: prev.nodes.map(n => n.id === selected.id
+        ? { ...n, label: editLabel.trim() || n.label, text: editText }
+        : n),
+    } : prev)
+    setSelected(prev => prev ? { ...prev, label: editLabel.trim() || prev.label, text: editText } : prev)
+    setEditMode(false)
+  }
+
+  function deleteSelectedNode(): void {
+    if (!selected) return
+    setBrain(prev => prev ? {
+      ...prev,
+      nodes: prev.nodes.filter(n => n.id !== selected.id),
+      edges: prev.edges.filter(e => {
+        const s = typeof e.source === 'string' ? e.source : (e.source as BrainNodeView).id
+        const t = typeof e.target === 'string' ? e.target : (e.target as BrainNodeView).id
+        return s !== selected.id && t !== selected.id
+      }),
+    } : prev)
+    setSelected(null)
+    setCitation(null)
+    setEditMode(false)
+  }
+
+  function addChildNode(parent: BrainNodeView, nodeType: BrainNodeView['node_type']): void {
+    const newId = `${parent.clause?.clause_id ?? parent.id}:${nodeType}-${Date.now()}`
+    const newNode: BrainNodeView = {
+      id: newId,
+      label: nodeType.replace(/_/g, ' '),
+      status: 'clean',
+      color: NODE_TYPE_COLORS[nodeType] ?? '#007c79',
+      node_type: nodeType,
+      text: '',
+      clause: parent.clause,
+    }
+    setBrain(prev => prev ? {
+      ...prev,
+      nodes: [...prev.nodes, newNode],
+      edges: [...prev.edges, { source: parent.id, target: newId, similarity: 0.5, relationship: 'playbook_hierarchy', edge_scope: 'island' }],
+    } : prev)
+    setSelected(newNode)
+    setEditMode(true)
+    setEditLabel(newNode.label)
+    setEditText('')
+    graphRef.current?.d3ReheatSimulation()
+  }
+
+  async function handleNlSubmit(): Promise<void> {
+    if (!nlInput.trim() || !brain) return
+    setNlProcessing(true)
+    setProposedChange(null)
+    try {
+      const nodeSummaries = brain.nodes
+        .filter(n => n.node_type === 'clause')
+        .map(n => `${n.id}: ${n.label}`)
+      const result = await brainCopilot(playbookId, nlInput, nodeSummaries)
+      setProposedChange(result)
+    } catch {
+      setProposedChange({
+        action: 'edit',
+        explanation: 'Could not parse instruction. Please try being more specific.',
+      })
+    } finally {
+      setNlProcessing(false)
+      setNlInput('')
+    }
+  }
+
+  function applyProposedChange(): void {
+    if (!proposedChange || !brain) return
+    if (proposedChange.action === 'delete' && proposedChange.targetNodeId) {
+      const target = brain.nodes.find(n => n.id === proposedChange.targetNodeId)
+      if (target) { setSelected(target); deleteSelectedNode() }
+    } else if (proposedChange.action === 'add' && proposedChange.newNodeType) {
+      const clauseNodes = brain.nodes.filter(n => n.node_type === 'clause')
+      const parent = clauseNodes.find(n =>
+        proposedChange.targetClause && n.label.toLowerCase().includes(proposedChange.targetClause.toLowerCase())
+      ) ?? clauseNodes[0]
+      if (parent) addChildNode(parent, proposedChange.newNodeType as BrainNodeView['node_type'])
+    } else if (proposedChange.action === 'edit' && proposedChange.targetNodeId && proposedChange.newText) {
+      setBrain(prev => prev ? {
+        ...prev,
+        nodes: prev.nodes.map(n => n.id === proposedChange.targetNodeId
+          ? { ...n, text: proposedChange.newText! }
+          : n),
+      } : prev)
+    }
+    setProposedChange(null)
+    setCommitted(false)
+    setMessage('Change applied. Review the brain and commit when ready.')
+  }
+
   function handleNodeClick(node: BrainNodeView): void {
     setSelected(node)
+    setEditMode(false)
     setTooltip(null)
     // If contract is active and this node is matched, show citation
     if (contractAnalysisRef.current) {
@@ -261,7 +421,7 @@ export function MiniBrainPage(): JSX.Element {
           <div className="miniBrainCanvas" ref={containerRef} aria-label="Mini brain graph">
             <ForceGraph2D<BrainNodeView, BrainEdgeView>
               ref={graphRef}
-              graphData={{ nodes: brain.nodes, links: brain.edges }}
+              graphData={graphData}
               nodeId="id"
               width={dims.w}
               height={dims.h}
@@ -269,9 +429,11 @@ export function MiniBrainPage(): JSX.Element {
               nodeCanvasObject={(node, ctx, scale) =>
                 drawMiniNode(node as BrainNodeView, ctx, scale, selected, matchedIdsRef)
               }
-              onRenderFramePre={(ctx) => {
+              onRenderFramePre={(ctx, globalScale) => {
+                globalScaleRef.current = globalScale
                 if (contractAnalysisRef.current && circleProgressRef.current > 0) {
-                  drawContractCircle(ctx, dims.w, dims.h, circleProgressRef.current)
+                  const R = Math.min(dims.w, dims.h) * 0.41 / globalScale
+                  drawContractCircle(ctx, R, circleProgressRef.current)
                 }
               }}
               linkCanvasObject={(link, ctx) =>
@@ -387,23 +549,128 @@ export function MiniBrainPage(): JSX.Element {
               </div>
             )}
 
-            {/* Regular node inspector */}
+            {/* Node inspector + editor */}
             {selected && !citation && (
               <div className="megaBrainNodeCard">
-                <p className="panelKicker" style={{ color: NODE_TYPE_COLORS[selected.node_type] }}>
-                  {selected.node_type.replace(/_/g, ' ')}
-                </p>
-                <h3>{selected.label}</h3>
-                <p>{(selected.text || selected.clause?.preferred_position || '').slice(0, 200)}</p>
-                {selected.clause?.red_line && (
-                  <p style={{ marginTop: 8, fontSize: 11, color: 'var(--risk)' }}>
-                    Red line: {selected.clause.red_line.slice(0, 100)}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                  <p className="panelKicker" style={{ color: NODE_TYPE_COLORS[selected.node_type], margin: 0 }}>
+                    {selected.node_type.replace(/_/g, ' ')}
                   </p>
+                  {isPeter && !editMode && (
+                    <button type="button" onClick={() => startEditing(selected)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 0, display: 'flex', alignItems: 'center', gap: 3, fontSize: 11 }}>
+                      <Pencil size={11} /> Edit
+                    </button>
+                  )}
+                </div>
+
+                {editMode && isPeter ? (
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    <label style={{ fontSize: 11, color: 'var(--ink)', fontWeight: 600, display: 'grid', gap: 3 }}>
+                      Label
+                      <input
+                        value={editLabel}
+                        onChange={e => setEditLabel(e.target.value)}
+                        style={{ fontSize: 12, padding: '5px 8px', borderRadius: 5, border: '1px solid rgba(47,42,34,.2)', background: 'rgba(255,251,243,.9)', color: 'var(--ink)', outline: 'none' }}
+                      />
+                    </label>
+                    <label style={{ fontSize: 11, color: 'var(--ink)', fontWeight: 600, display: 'grid', gap: 3 }}>
+                      Text / position
+                      <textarea
+                        value={editText}
+                        onChange={e => setEditText(e.target.value)}
+                        rows={4}
+                        style={{ fontSize: 11, padding: '5px 8px', borderRadius: 5, border: '1px solid rgba(47,42,34,.2)', background: 'rgba(255,251,243,.9)', color: 'var(--ink)', outline: 'none', resize: 'vertical' }}
+                      />
+                    </label>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button type="button" className="primaryAction" style={{ flex: 1, fontSize: 11 }} onClick={saveNodeEdit}>Save</button>
+                      <button type="button" className="secondaryAction" style={{ flex: 1, fontSize: 11 }} onClick={() => setEditMode(false)}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <h3 style={{ margin: '0 0 4px' }}>{selected.label}</h3>
+                    <p style={{ fontSize: 12, margin: '0 0 6px', lineHeight: 1.5 }}>
+                      {(selected.text || selected.clause?.preferred_position || '').slice(0, 200)}
+                    </p>
+                    {selected.clause?.red_line && (
+                      <p style={{ marginTop: 4, fontSize: 11, color: 'var(--risk)' }}>
+                        Red line: {selected.clause.red_line.slice(0, 100)}
+                      </p>
+                    )}
+                    <p style={{ marginTop: 4, fontSize: 11, color: 'var(--muted)' }}>
+                      {selected.node_type} / {selected.status}
+                    </p>
+                  </>
                 )}
-                <p style={{ marginTop: 6, fontSize: 11, color: 'var(--muted)' }}>
-                  {selected.node_type} / {selected.status}
-                </p>
+
+                {isPeter && !editMode && (
+                  <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                    <button type="button" onClick={deleteSelectedNode}
+                      style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(180,40,40,.08)', border: '1px solid rgba(180,40,40,.22)', color: 'var(--risk)', cursor: 'pointer' }}>
+                      <Trash2 size={10} /> Delete
+                    </button>
+                    {selected.node_type === 'clause' && (
+                      <>
+                        {(['preferred','fallback_1','fallback_2','red_line','escalation'] as const).map(t => (
+                          <button key={t} type="button" onClick={() => addChildNode(selected, t)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, padding: '3px 8px', borderRadius: 5, background: 'rgba(0,124,121,.07)', border: '1px solid rgba(0,124,121,.2)', color: 'var(--turquoise)', cursor: 'pointer' }}>
+                            <Plus size={10} /> {t.replace(/_/g, ' ')}
+                          </button>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
+            )}
+
+            {/* NL Copilot — Peter only */}
+            {isPeter && (
+              <section style={{ borderTop: '1px solid rgba(47,42,34,.1)', paddingTop: 12, marginTop: 4 }}>
+                <p className="panelKicker" style={{ marginBottom: 6 }}>Brain Copilot</p>
+                <p style={{ fontSize: 10, color: 'var(--muted)', margin: '0 0 8px', lineHeight: 1.5 }}>
+                  Describe a change in plain language. Lou will propose an edit.
+                </p>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    value={nlInput}
+                    onChange={e => setNlInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleNlSubmit() } }}
+                    placeholder="e.g. Add a red line for the liability clause…"
+                    disabled={nlProcessing}
+                    style={{ flex: 1, fontSize: 11, padding: '6px 8px', borderRadius: 5, border: '1px solid rgba(47,42,34,.18)', background: 'rgba(255,251,243,.9)', color: 'var(--ink)', outline: 'none' }}
+                  />
+                  <button type="button" onClick={() => void handleNlSubmit()} disabled={nlProcessing || !nlInput.trim()}
+                    style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, padding: '6px 10px', borderRadius: 5, background: 'var(--turquoise)', color: 'white', border: 'none', cursor: 'pointer', opacity: nlProcessing || !nlInput.trim() ? 0.5 : 1 }}>
+                    <Sparkles size={12} />
+                  </button>
+                </div>
+                {nlProcessing && (
+                  <div className="uploadProgressWrap" style={{ marginTop: 8 }}>
+                    <div className="uploadProgressBar" style={{ width: '70%' }} />
+                  </div>
+                )}
+                {proposedChange && (
+                  <div className="pageEnter" style={{ marginTop: 10, background: 'rgba(0,124,121,.06)', border: '1px solid rgba(0,124,121,.2)', borderRadius: 8, padding: '10px 12px' }}>
+                    <p className="panelKicker" style={{ color: 'var(--turquoise)', marginBottom: 4 }}>
+                      Proposed: {proposedChange.action.toUpperCase()}
+                    </p>
+                    <p style={{ fontSize: 11, color: 'var(--ink)', margin: '0 0 10px', lineHeight: 1.5 }}>
+                      {proposedChange.explanation}
+                    </p>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button type="button" className="primaryAction" style={{ flex: 1, fontSize: 11 }} onClick={applyProposedChange}>
+                        Accept &amp; apply
+                      </button>
+                      <button type="button" className="secondaryAction" style={{ flex: 1, fontSize: 11 }} onClick={() => setProposedChange(null)}>
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </section>
             )}
 
             {/* Contract upload — all roles */}
@@ -475,6 +742,40 @@ export function MiniBrainPage(): JSX.Element {
                     <Upload size={13} />
                     {uploading ? 'Analysing…' : 'Upload contract'}
                   </button>
+                  {!contractAnalysis && !uploading && (
+                    <button
+                      className="secondaryAction drawerWide"
+                      type="button"
+                      style={{ marginTop: 6, fontSize: 11 }}
+                      onClick={() => {
+                        setUploading(true)
+                        setMessage(null)
+                        analyzePublicContractText(playbookId, DEMO_CONTRACT_TEXT, 'Demo-NDA.txt')
+                          .then((result) => {
+                            const ids = new Set<string>()
+                            for (const c of result.clauses) {
+                              if (c.match) {
+                                ids.add(c.match.matched_clause.clause_id)
+                                ids.add(`${c.match.matched_clause.clause_id}:preferred`)
+                              }
+                            }
+                            setMatchedIds(ids)
+                            matchedIdsRef.current = ids
+                            setContractAnalysis(result)
+                            setCitation(null)
+                            setSelected(null)
+                          })
+                          .catch(() => {
+                            setMessage('Demo analysis failed — check the API connection.')
+                          })
+                          .finally(() => {
+                            setUploading(false)
+                          })
+                      }}
+                    >
+                      Try demo NDA
+                    </button>
+                  )}
                   {uploading && (
                     <div className="uploadProgressWrap" style={{ marginTop: 8 }}>
                       <div className="uploadProgressBar" style={{ width: '100%' }} />
@@ -561,27 +862,25 @@ export function MiniBrainPage(): JSX.Element {
   )
 }
 
-function drawContractCircle(ctx: CanvasRenderingContext2D, w: number, h: number, progress: number): void {
-  const cx = w / 2
-  const cy = h / 2
-  const R = Math.min(w, h) * 0.41
-  // Glow halo
-  const glowGrad = ctx.createRadialGradient(cx, cy, R - 30, cx, cy, R + 30)
+// R is in D3 graph-space units; ctx is already in graph-space (camera transform applied)
+function drawContractCircle(ctx: CanvasRenderingContext2D, R: number, progress: number): void {
+  // Draw centered on D3 simulation origin (0,0) — where nodes cluster
+  const glowGrad = ctx.createRadialGradient(0, 0, R - R * 0.14, 0, 0, R + R * 0.14)
   glowGrad.addColorStop(0, 'rgba(20,15,10,0)')
   glowGrad.addColorStop(0.5, `rgba(20,15,10,${0.07 * progress})`)
   glowGrad.addColorStop(1, 'rgba(20,15,10,0)')
   ctx.beginPath()
-  ctx.arc(cx, cy, R, 0, Math.PI * 2)
+  ctx.arc(0, 0, R, 0, Math.PI * 2)
   ctx.strokeStyle = glowGrad
-  ctx.lineWidth = 60
+  ctx.lineWidth = R * 0.28
   ctx.stroke()
   // Dashed arc drawing proportional to progress
   ctx.save()
   ctx.beginPath()
-  ctx.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress)
+  ctx.arc(0, 0, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress)
   ctx.strokeStyle = `rgba(20,15,10,${0.75 * progress})`
   ctx.lineWidth = 2.5
-  ctx.setLineDash([12, 6])
+  ctx.setLineDash([R * 0.055, R * 0.028])
   ctx.stroke()
   ctx.setLineDash([])
   ctx.restore()
@@ -591,7 +890,7 @@ function drawContractCircle(ctx: CanvasRenderingContext2D, w: number, h: number,
     ctx.fillStyle = `rgba(20,15,10,${Math.min(1, (progress - 0.9) * 10)})`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText('CONTRACT BOUNDARY', cx, cy - R - 18)
+    ctx.fillText('CONTRACT BOUNDARY', 0, -R - 18)
   }
 }
 
