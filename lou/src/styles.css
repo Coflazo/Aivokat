@@ -1477,20 +1477,23 @@ body {
 /* ─── Mini brain improvements ────────────────────────────── */
 .miniBrainLayout {
   display: flex;
+  align-items: stretch;
   flex: 1;
   min-height: 0;
   gap: 0;
-  height: calc(100vh - 72px);
+  height: calc(100vh - 120px);
   padding: 0 24px 24px 112px;
 }
 
 .miniBrainCanvas {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   position: relative;
   border-radius: 12px;
   overflow: hidden;
 }
+
 
 .clauseInspector {
   width: 280px;

@@ -96,6 +96,11 @@ export function MegaBrainPage(): JSX.Element {
   const navigate = useNavigate()
   const { user } = useUser()
 
+  const graphData = React.useMemo(
+    () => graph ? { nodes: graph.nodes, links: graph.links } : { nodes: [], links: [] },
+    [graph],
+  )
+
   React.useEffect(() => {
     function track(e: MouseEvent): void { mousePos.current = { x: e.clientX, y: e.clientY } }
     window.addEventListener('mousemove', track)
@@ -121,14 +126,49 @@ export function MegaBrainPage(): JSX.Element {
   }, [])
 
   React.useEffect(() => {
-    if (!containerRef.current) return
+    if (!graph || loading || !containerRef.current) return
+    const el = containerRef.current
     const ro = new ResizeObserver(entries => {
       const { width, height } = entries[0].contentRect
-      setDims({ w: width, h: height })
+      if (width > 0 && height > 0) setDims({ w: width, h: height })
     })
-    ro.observe(containerRef.current)
-    return () => ro.disconnect()
-  }, [])
+    ro.observe(el)
+    const rect = el.getBoundingClientRect()
+    if (rect.width > 0 && rect.height > 0) setDims({ w: rect.width, h: rect.height })
+    const t = setTimeout(() => { graphRef.current?.zoomToFit(500, 80) }, 800)
+    return () => { ro.disconnect(); clearTimeout(t) }
+  }, [graph, loading])
+
+  // Island separation: place each playbook at a ring position
+  React.useEffect(() => {
+    const g = graphRef.current
+    if (!g || !megaBrain || megaBrain.islands.length === 0) return
+
+    const count = megaBrain.islands.length
+    const ringR = count <= 2 ? 300 : count <= 5 ? 450 : 580
+    const targetPos = new Map<string, { x: number; y: number }>()
+    megaBrain.islands.forEach((island, i) => {
+      const angle = (i / count) * Math.PI * 2 - Math.PI / 2
+      targetPos.set(island.playbook_id, { x: Math.cos(angle) * ringR, y: Math.sin(angle) * ringR })
+    })
+
+    function islandRingForce(alpha: number): void {
+      for (const node of (g.graphData()?.nodes ?? [])) {
+        const t = targetPos.get((node as any).island_id ?? '')
+        if (!t) continue
+        node.vx = (node.vx ?? 0) + (t.x - (node.x ?? 0)) * alpha * 0.13
+        node.vy = (node.vy ?? 0) + (t.y - (node.y ?? 0)) * alpha * 0.13
+      }
+    }
+    ;(islandRingForce as any).initialize = (): void => {}
+    g.d3Force('islandRing', islandRingForce)
+    g.d3Force('charge')?.strength(-120)
+    g.d3Force('link')?.distance((link: any) =>
+      link.edge_scope === 'cross_island' ? 600 : 30
+    )
+    g.d3ReheatSimulation()
+    return () => { g.d3Force('islandRing', null) }
+  }, [megaBrain])
 
   async function runSearch(): Promise<void> {
     if (query.trim().length < 2) return
@@ -204,12 +244,18 @@ export function MegaBrainPage(): JSX.Element {
         </div>
       </section>
 
-      {loading && <BrainLoader label="Loading Mega Brain…" />}
-
-      {graph && !loading && (
-        <section className="megaBrainLayout pageEnter">
-          <div className="megaBrainCanvas" ref={containerRef} aria-label="Mega brain graph">
-            {megaBrain && megaBrain.nodes.length === 0 ? (
+      <section className="megaBrainLayout pageEnter">
+          <div className="megaBrainCanvas" ref={containerRef} aria-label="Mega brain graph" style={{ position: 'relative' }}>
+            {loading && (
+              <div style={{
+                position: 'absolute', inset: 0, display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+                zIndex: 10, pointerEvents: 'none',
+              }}>
+                <BrainLoader label="Loading Mega Brain…" />
+              </div>
+            )}
+            {!loading && megaBrain && megaBrain.nodes.length === 0 ? (
               <div style={{
                 position: 'absolute', inset: 0, display: 'flex',
                 flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -224,7 +270,7 @@ export function MegaBrainPage(): JSX.Element {
             ) : (
               <ForceGraph2D<GraphNode, GraphEdge>
                 ref={graphRef}
-                graphData={{ nodes: graph.nodes, links: graph.links }}
+                graphData={graphData}
                 nodeId="id"
                 width={dims.w}
                 height={dims.h}

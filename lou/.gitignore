@@ -1,0 +1,11 @@
+# LaTeX build artifacts
+*.aux
+*.log
+*.nav
+*.out
+*.snm
+*.toc
+*.pdf
+*.tex
+lou-pitch-deck.*
+lou-api-reference.*

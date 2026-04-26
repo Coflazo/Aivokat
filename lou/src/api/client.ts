@@ -26,11 +26,14 @@ import type {
 import {
   MOCK_ALL_PLAYBOOKS,
   MOCK_BRAIN,
+  PROCUREMENT_BRAIN,
   MOCK_CONTRACT_ANALYSIS,
   MOCK_MEGA_BRAIN,
   MOCK_PUBLIC_PLAYBOOKS,
   MOCK_PUBLISH_RESPONSE,
   MOCK_UPLOAD_RESPONSE,
+  generateGrowProposals,
+  type PlaybookUpdateProposal,
 } from './mockData'
 
 // ─── Mock flag — set false to use real backend ─────────────────────────────
@@ -159,7 +162,10 @@ export const rejectIssue = (issueId: number): Promise<PlaybookApi> =>
   api.post(`/analysis/issues/${issueId}/reject`).then((r) => r.data)
 
 export const fetchPlaybookBrain = (playbookId: string): Promise<PlaybookBrain> => {
-  if (MOCK) return delay({ ...MOCK_BRAIN, playbook_id: playbookId }, 700)
+  if (MOCK) {
+    const brain = playbookId.startsWith('proc') ? PROCUREMENT_BRAIN : MOCK_BRAIN
+    return delay({ ...brain, playbook_id: playbookId }, 50)
+  }
   return api.get(`/playbooks/${playbookId}/brain`).then((r) => r.data)
 }
 
@@ -176,7 +182,7 @@ export const publishPlaybook = (
 }
 
 export const fetchMegaBrain = (): Promise<MegaBrain> => {
-  if (MOCK) return delay(MOCK_MEGA_BRAIN, 600)
+  if (MOCK) return delay(MOCK_MEGA_BRAIN, 50)
   return api.get('/mega-brain').then((r) => r.data)
 }
 
@@ -256,6 +262,21 @@ export const analyzePublicContractFile = (
 export const fetchAllPlaybooks = (): Promise<PlaybookApi[]> => {
   if (MOCK) return delay(MOCK_ALL_PLAYBOOKS, 400)
   return api.get('/playbooks').then((r) => r.data)
+}
+
+// ─── GROW: Playbook update proposals ──────────────────────────────────────────
+export { type PlaybookUpdateProposal } from './mockData'
+
+export const fetchGrowProposals = (
+  playbookId: string,
+  contractFilename: string,
+  deviations: Array<{ clauseId: string; negotiatedText: string; position: string }>,
+): Promise<PlaybookUpdateProposal[]> => {
+  if (MOCK) return delay(generateGrowProposals(contractFilename, deviations), 800)
+  return api.post(`/playbooks/${playbookId}/grow-proposals`, {
+    contract_filename: contractFilename,
+    deviations,
+  }).then((r) => r.data)
 }
 
 // ─── Brain Copilot ─────────────────────────────────────────────────────────

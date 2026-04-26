@@ -9,7 +9,7 @@
 ### Base URL
 
 ```
-http://localhost:8000
+https://louapi.com
 ```
 
 All endpoints return JSON. File upload endpoints accept `multipart/form-data`.
@@ -81,7 +81,7 @@ Upload a Siemens-style XLSX playbook file and create a draft API module. The spr
 | `clauses_created` | `integer` | Number of clauses parsed from the sheet |
 
 ```bash
-curl -X POST http://localhost:8000/api/playbooks/upload \
+curl -X POST https://louapi.com/api/playbooks/upload \
   -F "file=@siemens-nda-playbook.xlsx" \
   -F "owner=Peter" \
   -F "name=NDA Playbook v3" \
@@ -111,7 +111,7 @@ List all playbooks ordered by most recently updated. Returns all statuses (draft
 **Response** — `list[PlaybookApiView]`
 
 ```bash
-curl http://localhost:8000/api/playbooks | jq '[.[] | {id:.playbook_id, name:.name, status:.status, clauses:(.clauses|length)}]'
+curl https://louapi.com/api/playbooks | jq '[.[] | {id:.playbook_id, name:.name, status:.status, clauses:(.clauses|length)}]'
 ```
 
 ```json
@@ -153,7 +153,7 @@ Retrieve a single playbook including all clauses and any open issues per clause.
 | `published_at` | `string\|null` | ISO 8601 publish timestamp |
 
 ```bash
-curl http://localhost:8000/api/playbooks/nda-playbook-v3 | jq '{id:.playbook_id, status:.status, clause_count:(.clauses|length)}'
+curl https://louapi.com/api/playbooks/nda-playbook-v3 | jq '{id:.playbook_id, status:.status, clause_count:(.clauses|length)}'
 ```
 
 ---
@@ -190,7 +190,7 @@ Returns the playbook as a graph of nodes and edges for the Mini Brain visualizat
 | `edge_scope` | `string` | `island` or `cross_island` |
 
 ```bash
-curl http://localhost:8000/api/playbooks/nda-playbook-v3/brain | jq '{nodes:(.nodes|length), edges:(.edges|length), status:.status}'
+curl https://louapi.com/api/playbooks/nda-playbook-v3/brain | jq '{nodes:(.nodes|length), edges:(.edges|length), status:.status}'
 ```
 
 ```json
@@ -226,7 +226,7 @@ Edit one field of one clause in a draft playbook. Only draft playbooks can be ed
 | `draft_diff` | `object` | `{field_name, old_value, new_value, edited_by, edited_at}` |
 
 ```bash
-curl -X PATCH http://localhost:8000/api/playbooks/nda-playbook-v3/clauses/limitation-of-liability \
+curl -X PATCH https://louapi.com/api/playbooks/nda-playbook-v3/clauses/limitation-of-liability \
   -H 'Content-Type: application/json' \
   -d '{
     "field_name": "red_line",
@@ -237,7 +237,7 @@ curl -X PATCH http://localhost:8000/api/playbooks/nda-playbook-v3/clauses/limita
 
 ```bash
 # View another clause's preferred position
-curl -X PATCH http://localhost:8000/api/playbooks/nda-playbook-v3/clauses/governing-law \
+curl -X PATCH https://louapi.com/api/playbooks/nda-playbook-v3/clauses/governing-law \
   -H 'Content-Type: application/json' \
   -d '{
     "field_name": "preferred_position",
@@ -268,7 +268,7 @@ Publish a draft playbook. This is the single gate action — it freezes the play
 | `mega_brain_entries` | `integer` | Number of clause vectors written to Mega Brain |
 
 ```bash
-curl -X POST http://localhost:8000/api/playbooks/nda-playbook-v3/publish \
+curl -X POST https://louapi.com/api/playbooks/nda-playbook-v3/publish \
   -H 'Content-Type: application/json' \
   -d '{
     "committed_by": "Peter",
@@ -286,7 +286,7 @@ curl -X POST http://localhost:8000/api/playbooks/nda-playbook-v3/publish \
 
 ```bash
 # Attempt to publish a playbook with no clauses — returns 400
-curl -X POST http://localhost:8000/api/playbooks/empty-draft/publish \
+curl -X POST https://louapi.com/api/playbooks/empty-draft/publish \
   -H 'Content-Type: application/json' \
   -d '{"committed_by":"Peter","comment":"Test publish"}'
 ```
@@ -317,12 +317,12 @@ List all published playbooks. Lightweight — no clause text returned.
 | `clause_count` | `integer` | Number of clauses in this playbook |
 
 ```bash
-curl http://localhost:8000/api/public/playbooks | jq .
+curl https://louapi.com/api/public/playbooks | jq .
 ```
 
 ```bash
 # Filter published playbooks for those owned by a particular lawyer
-curl http://localhost:8000/api/public/playbooks | jq '[.[] | select(.owner == "Peter")]'
+curl https://louapi.com/api/public/playbooks | jq '[.[] | select(.owner == "Peter")]'
 ```
 
 ---
@@ -332,7 +332,7 @@ curl http://localhost:8000/api/public/playbooks | jq '[.[] | select(.owner == "P
 Return the complete published playbook schema — all clauses with all hierarchy fields. This is the structured data payload downstream AI tools consume.
 
 ```bash
-curl http://localhost:8000/api/public/playbooks/nda-playbook-v3/schema \
+curl https://louapi.com/api/public/playbooks/nda-playbook-v3/schema \
   | jq '{id:.playbook_id, name:.name, clauses:(.clauses | length)}'
 ```
 
@@ -368,28 +368,28 @@ This is the `lou_api/text` endpoint — returns structured playbook knowledge in
 | `confidence` | `float` | Raw semantic match score (0.0–1.0) |
 
 ```bash
-curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/ask \
+curl -s -X POST https://louapi.com/api/public/playbooks/nda-playbook-v3/ask \
   -H 'Content-Type: application/json' \
   -d '{"question":"Can we accept unlimited liability?"}' \
   | jq '{answer:.answer, confidence:.confidence, clause:.citations[0].clause_name}'
 ```
 
 ```bash
-curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/ask \
+curl -s -X POST https://louapi.com/api/public/playbooks/nda-playbook-v3/ask \
   -H 'Content-Type: application/json' \
   -d '{"question":"Who owns the intellectual property created during the engagement?"}' \
   | jq .
 ```
 
 ```bash
-curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/ask \
+curl -s -X POST https://louapi.com/api/public/playbooks/nda-playbook-v3/ask \
   -H 'Content-Type: application/json' \
   -d '{"question":"What is our fallback position on governing law if the counterparty insists on their jurisdiction?"}' \
   | jq '{answer:.answer, confidence:.confidence}'
 ```
 
 ```bash
-curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/ask \
+curl -s -X POST https://louapi.com/api/public/playbooks/nda-playbook-v3/ask \
   -H 'Content-Type: application/json' \
   -d '{"question":"At what point must we escalate a negotiation to senior legal?"}' \
   | jq '{answer:.answer, clause:.citations[0].clause_name}'
@@ -433,7 +433,7 @@ Returns which playbook position the incoming clause falls into (preferred, fallb
 | `final_score` | `float` | Composite weighted score (0.0–1.0) |
 
 ```bash
-curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/match-clause \
+curl -s -X POST https://louapi.com/api/public/playbooks/nda-playbook-v3/match-clause \
   -H 'Content-Type: application/json' \
   -d '{
     "clause_text": "The Receiving Party accepts unlimited liability for all direct, indirect, incidental, and consequential damages.",
@@ -442,7 +442,7 @@ curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/match
 ```
 
 ```bash
-curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/match-clause \
+curl -s -X POST https://louapi.com/api/public/playbooks/nda-playbook-v3/match-clause \
   -H 'Content-Type: application/json' \
   -d '{
     "clause_text": "The recipient shall hold all confidential information in strict confidence for a period of five years.",
@@ -452,7 +452,7 @@ curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/match
 
 ```bash
 # Match a clause with no heading — Lou infers from content
-curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/match-clause \
+curl -s -X POST https://louapi.com/api/public/playbooks/nda-playbook-v3/match-clause \
   -H 'Content-Type: application/json' \
   -d '{
     "clause_text": "Either party may terminate this agreement for convenience upon 30 days written notice."
@@ -461,7 +461,7 @@ curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/match
 
 ```bash
 # Match a clause that touches the red line
-curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/match-clause \
+curl -s -X POST https://louapi.com/api/public/playbooks/nda-playbook-v3/match-clause \
   -H 'Content-Type: application/json' \
   -d '{
     "clause_text": "Liability shall be capped at one euro.",
@@ -493,12 +493,12 @@ Given a contract clause and a matched playbook clause ID, generate a suggested r
 
 ```bash
 # Two-step: match then rewrite
-CLAUSE_ID=$(curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/match-clause \
+CLAUSE_ID=$(curl -s -X POST https://louapi.com/api/public/playbooks/nda-playbook-v3/match-clause \
   -H 'Content-Type: application/json' \
   -d '{"clause_text":"Liability shall be capped at one euro.","heading":"Limitation of Liability"}' \
   | jq -r '.matched_clause.clause_id')
 
-curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/suggest-rewrite \
+curl -s -X POST https://louapi.com/api/public/playbooks/nda-playbook-v3/suggest-rewrite \
   -H 'Content-Type: application/json' \
   -d "{
     \"contract_clause\": \"Liability shall be capped at one euro.\",
@@ -508,7 +508,7 @@ curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/sugge
 
 ```bash
 # Suggest rewrite for a liability clause
-curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/suggest-rewrite \
+curl -s -X POST https://louapi.com/api/public/playbooks/nda-playbook-v3/suggest-rewrite \
   -H 'Content-Type: application/json' \
   -d '{
     "contract_clause": "Both parties waive all rights to seek consequential damages.",
@@ -550,7 +550,7 @@ Analyze a full contract supplied as plain text. Lou segments the contract into c
 | `unmapped_count` | `integer` | Clauses with no confident playbook match |
 
 ```bash
-curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/analyze-contract \
+curl -s -X POST https://louapi.com/api/public/playbooks/nda-playbook-v3/analyze-contract \
   -H 'Content-Type: application/json' \
   -d '{
     "text": "1. Confidentiality\nThe Receiving Party shall keep all information confidential with reasonable care.\n\n2. Liability\nBoth parties accept unlimited liability for all damages.\n\n3. Governing Law\nThis agreement is governed by the laws of England and Wales.",
@@ -560,7 +560,7 @@ curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/analy
 
 ```bash
 # Analyze a full NDA and view all explanations
-curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/analyze-contract \
+curl -s -X POST https://louapi.com/api/public/playbooks/nda-playbook-v3/analyze-contract \
   -H 'Content-Type: application/json' \
   -d @full-nda.json | jq '.explanations[]'
 ```
@@ -581,14 +581,14 @@ Same as `analyze-contract` but accepts a file upload (PDF, DOCX, or TXT). The fi
 **Response** — Same as `analyze-contract`
 
 ```bash
-curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/analyze-contract-file \
+curl -s -X POST https://louapi.com/api/public/playbooks/nda-playbook-v3/analyze-contract-file \
   -F "file=@supplier-nda-draft.pdf" \
   | jq '{preferred:.risk_heatmap.preferred_count, red_line:.risk_heatmap.redline_count, unmapped:.risk_heatmap.unmapped_count}'
 ```
 
 ```bash
 # Analyze a DOCX and get per-clause details
-curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/analyze-contract-file \
+curl -s -X POST https://louapi.com/api/public/playbooks/nda-playbook-v3/analyze-contract-file \
   -F "file=@counterparty-terms.docx" \
   -F "source_filename=counterparty-terms-2026-04-25.docx" \
   | jq '.clauses[] | {clause:.segmented_clause.heading, classification:.match.classification}'
@@ -623,7 +623,7 @@ Identify contract clauses that do not map to any position in the playbook — co
 | `reason` | `string` | Explanation of why this clause is unmapped |
 
 ```bash
-curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/coverage-gaps \
+curl -s -X POST https://louapi.com/api/public/playbooks/nda-playbook-v3/coverage-gaps \
   -H 'Content-Type: application/json' \
   -d '{
     "text": "1. Payment\nInvoices are due 60 days after receipt.\n\n2. Force Majeure\nNeither party shall be liable for delays caused by events outside their control.",
@@ -633,7 +633,7 @@ curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/cover
 
 ```bash
 # Count unmapped clauses in a full contract
-curl -s -X POST http://localhost:8000/api/public/playbooks/nda-playbook-v3/coverage-gaps \
+curl -s -X POST https://louapi.com/api/public/playbooks/nda-playbook-v3/coverage-gaps \
   -H 'Content-Type: application/json' \
   -d '{"text":"...full contract text..."}' \
   | jq '.gaps | length'
@@ -674,22 +674,22 @@ Retrieve the complete Mega Brain: all published playbooks as islands, all nodes 
 | `node_count` | `integer` | Total node count for the island |
 
 ```bash
-curl http://localhost:8000/api/mega-brain | jq '{total_nodes:(.nodes|length), total_edges:(.edges|length), playbooks:(.modules|length)}'
+curl https://louapi.com/api/mega-brain | jq '{total_nodes:(.nodes|length), total_edges:(.edges|length), playbooks:(.modules|length)}'
 ```
 
 ```bash
 # List all playbooks in the brain with their topic counts
-curl http://localhost:8000/api/mega-brain | jq '.modules[] | {name:.name, owner:.owner, topics:(.topics|length)}'
+curl https://louapi.com/api/mega-brain | jq '.modules[] | {name:.name, owner:.owner, topics:(.topics|length)}'
 ```
 
 ```bash
 # Find all cross-island edges (connections between different playbooks)
-curl http://localhost:8000/api/mega-brain | jq '[.edges[] | select(.edge_scope == "cross_island")]'
+curl https://louapi.com/api/mega-brain | jq '[.edges[] | select(.edge_scope == "cross_island")]'
 ```
 
 ```bash
 # See all nodes with warning or issue status
-curl http://localhost:8000/api/mega-brain | jq '[.nodes[] | select(.status != "clean") | {id:.id, status:.status, label:.label}]'
+curl https://louapi.com/api/mega-brain | jq '[.nodes[] | select(.status != "clean") | {id:.id, status:.status, label:.label}]'
 ```
 
 ---
@@ -720,21 +720,21 @@ This is the `lou_api/experience` endpoint — returns clauses most semantically 
 Results are ranked by similarity descending, top 8 returned.
 
 ```bash
-curl "http://localhost:8000/api/mega-brain/search?q=limitation+of+liability" | jq '[.[] | {topic:.topic, playbook:.playbook_id, similarity:.similarity}]'
+curl "https://louapi.com/api/mega-brain/search?q=limitation+of+liability" | jq '[.[] | {topic:.topic, playbook:.playbook_id, similarity:.similarity}]'
 ```
 
 ```bash
-curl "http://localhost:8000/api/mega-brain/search?q=data+protection+GDPR" | jq '.[0]'
+curl "https://louapi.com/api/mega-brain/search?q=data+protection+GDPR" | jq '.[0]'
 ```
 
 ```bash
-curl "http://localhost:8000/api/mega-brain/search?q=termination+for+convenience" \
+curl "https://louapi.com/api/mega-brain/search?q=termination+for+convenience" \
   | jq '[.[] | {topic:.topic, playbook:.playbook_id, score:.similarity}]'
 ```
 
 ```bash
 # Search for escalation triggers across all playbooks
-curl "http://localhost:8000/api/mega-brain/search?q=when+to+escalate+to+senior+legal" \
+curl "https://louapi.com/api/mega-brain/search?q=when+to+escalate+to+senior+legal" \
   | jq '.[] | {playbook:.playbook_id, clause:.topic, similarity:.similarity}'
 ```
 
@@ -772,13 +772,13 @@ The full updated playbook with `analysis_status` and `analysis_summary` fields s
 | `issue` | At least one critical-severity issue |
 
 ```bash
-curl -X POST http://localhost:8000/api/analysis/playbook/nda-playbook-v3 \
+curl -X POST https://louapi.com/api/analysis/playbook/nda-playbook-v3 \
   | jq '[.clauses[] | {clause:.clause_name, status:.analysis_status, summary:.analysis_summary}]'
 ```
 
 ```bash
 # Show only clauses with critical issues
-curl -X POST http://localhost:8000/api/analysis/playbook/nda-playbook-v3 \
+curl -X POST https://louapi.com/api/analysis/playbook/nda-playbook-v3 \
   | jq '[.clauses[] | select(.analysis_status == "issue") | {name:.clause_name, issues:(.issues | length)}]'
 ```
 
@@ -800,13 +800,13 @@ The updated playbook with the fix applied to the relevant clause. Clause status 
 
 ```bash
 # Accept fix for issue ID 42
-curl -X POST http://localhost:8000/api/analysis/issues/42/accept-fix \
+curl -X POST https://louapi.com/api/analysis/issues/42/accept-fix \
   | jq '.clauses[] | select(.clause_id == "limitation-of-liability") | {status:.analysis_status, open_issues:(.issues | length)}'
 ```
 
 ```bash
 # Accept a fix and confirm the clause is now clean
-curl -X POST http://localhost:8000/api/analysis/issues/7/accept-fix \
+curl -X POST https://louapi.com/api/analysis/issues/7/accept-fix \
   | jq '[.clauses[] | select(.analysis_status != "clean") | {name:.clause_name, status:.analysis_status}]'
 ```
 
@@ -825,7 +825,7 @@ Reject a proposed fix. The issue is permanently resolved as rejected and will no
 **Response** — `PlaybookApiView`
 
 ```bash
-curl -X POST http://localhost:8000/api/analysis/issues/43/reject \
+curl -X POST https://louapi.com/api/analysis/issues/43/reject \
   | jq '{status:"rejected", clauses_with_issues:([.clauses[] | select(.analysis_status == "issue")] | length)}'
 ```
 
@@ -871,7 +871,7 @@ Rewrite a single field of a single clause.
 | `meaning_preservation_note` | `string` | Explanation of what was and was not changed |
 
 ```bash
-curl -X POST http://localhost:8000/api/rewrite/cell \
+curl -X POST https://louapi.com/api/rewrite/cell \
   -H 'Content-Type: application/json' \
   -d '{
     "playbook_id": "nda-playbook-v3",
@@ -899,7 +899,7 @@ Rewrite all populated fields of one clause in a single call.
 **Response** — `RewriteRowResponse` with a `rewrites` array of `RewriteCellResponse` objects.
 
 ```bash
-curl -X POST http://localhost:8000/api/rewrite/row \
+curl -X POST https://louapi.com/api/rewrite/row \
   -H 'Content-Type: application/json' \
   -d '{"playbook_id":"nda-playbook-v3","clause_id":"confidentiality","mode":"shorter"}' \
   | jq '.rewrites[] | {field:.field_name, rewrite:.rewritten}'
@@ -921,7 +921,7 @@ Rewrite every field of every clause in a playbook. Long-running for large playbo
 **Response** — `RewritePlaybookResponse` with a flat `rewrites` list across all clauses.
 
 ```bash
-curl -X POST http://localhost:8000/api/rewrite/playbook \
+curl -X POST https://louapi.com/api/rewrite/playbook \
   -H 'Content-Type: application/json' \
   -d '{"playbook_id":"nda-playbook-v3","mode":"humanized"}' \
   | jq '.rewrites | length'
@@ -973,7 +973,7 @@ Ask a question in natural language. Conversation history can be supplied to enab
 | `confidence` | `float` | Retrieval confidence score |
 
 ```bash
-curl -s -X POST http://localhost:8000/api/chat \
+curl -s -X POST https://louapi.com/api/chat \
   -H 'Content-Type: application/json' \
   -d '{
     "message": "What is our position on limitation of liability in supplier agreements?",
@@ -983,7 +983,7 @@ curl -s -X POST http://localhost:8000/api/chat \
 
 ```bash
 # Multi-turn conversation
-curl -s -X POST http://localhost:8000/api/chat \
+curl -s -X POST https://louapi.com/api/chat \
   -H 'Content-Type: application/json' \
   -d '{
     "message": "Can you give me the fallback position on that?",
@@ -997,7 +997,7 @@ curl -s -X POST http://localhost:8000/api/chat \
 
 ```bash
 # Ask about escalation procedures
-curl -s -X POST http://localhost:8000/api/chat \
+curl -s -X POST https://louapi.com/api/chat \
   -H 'Content-Type: application/json' \
   -d '{"message":"When should a junior lawyer escalate to a partner on liability clauses?"}' \
   | jq '{answer:.answer, rules:.retrieved_rules}'
@@ -1040,17 +1040,17 @@ Prefix: `/api/commits`
 | `approval_status` | `enum` | `approved` / `rejected` |
 
 ```bash
-curl "http://localhost:8000/api/commits" | jq '[.[] | {hash:.commit_hash, topic:.topic, by:.committed_by, type:.change_type}]'
+curl "https://louapi.com/api/commits" | jq '[.[] | {hash:.commit_hash, topic:.topic, by:.committed_by, type:.change_type}]'
 ```
 
 ```bash
 # Filter commits by rule
-curl "http://localhost:8000/api/commits?rule_id=limitation-of-liability&limit=10" | jq .
+curl "https://louapi.com/api/commits?rule_id=limitation-of-liability&limit=10" | jq .
 ```
 
 ```bash
 # Paginate through commit history
-curl "http://localhost:8000/api/commits?page=2&limit=25" | jq '[.[] | {hash:.commit_hash, at:.committed_at}]'
+curl "https://louapi.com/api/commits?page=2&limit=25" | jq '[.[] | {hash:.commit_hash, at:.committed_at}]'
 ```
 
 ---
@@ -1079,12 +1079,12 @@ Prefix: `/api/review`
 | `created_at` | `string` | ISO 8601 timestamp |
 
 ```bash
-curl http://localhost:8000/api/review | jq '[.[] | {id:.id, topic:.topic, change_type:.change_type, similarity:.cosine_similarity}]'
+curl https://louapi.com/api/review | jq '[.[] | {id:.id, topic:.topic, change_type:.change_type, similarity:.cosine_similarity}]'
 ```
 
 ```bash
 # Show only contradicting proposals (highest priority)
-curl http://localhost:8000/api/review | jq '[.[] | select(.change_type == "contradicts")]'
+curl https://louapi.com/api/review | jq '[.[] | select(.change_type == "contradicts")]'
 ```
 
 ---
@@ -1118,7 +1118,7 @@ Approve or reject a proposed change. Approvals write the change to the live rule
 
 ```bash
 # Approve a proposed change
-curl -X POST http://localhost:8000/api/review/12/approve \
+curl -X POST https://louapi.com/api/review/12/approve \
   -H 'Content-Type: application/json' \
   -d '{
     "decision": "approved",
@@ -1130,7 +1130,7 @@ curl -X POST http://localhost:8000/api/review/12/approve \
 
 ```bash
 # Reject a proposed change with a reason
-curl -X POST http://localhost:8000/api/review/15/approve \
+curl -X POST https://louapi.com/api/review/15/approve \
   -H 'Content-Type: application/json' \
   -d '{
     "decision": "rejected",
@@ -1141,7 +1141,7 @@ curl -X POST http://localhost:8000/api/review/15/approve \
 
 ```bash
 # Approve a new rule proposal
-curl -X POST http://localhost:8000/api/review/8/approve \
+curl -X POST https://louapi.com/api/review/8/approve \
   -H 'Content-Type: application/json' \
   -d '{
     "decision": "approved",

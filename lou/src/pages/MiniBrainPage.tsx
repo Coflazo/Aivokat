@@ -2,7 +2,7 @@ import React from 'react'
 import ForceGraph2D, { type LinkObject, type NodeObject } from 'react-force-graph-2d'
 import { GitCommit, Pencil, Plus, Send, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { fetchPlaybookBrain, publishPlaybook, analyzePublicContractFile, analyzePublicContractText, brainCopilot } from '../api/client'
+import { fetchPlaybookBrain, publishPlaybook, analyzePublicContractFile, analyzePublicContractText, brainCopilot, fetchGrowProposals, type PlaybookUpdateProposal } from '../api/client'
 import { BrainLoader } from '../components/BrainLoader'
 import type { AnalyzeContractResponse, AnalyzedContractClause, BrainEdgeView, BrainNodeView, PlaybookBrain } from '../types'
 import { resolvePlaybookId, saveCurrentPlaybookId } from '../utils/currentPlaybook'
@@ -17,36 +17,53 @@ interface ProposedBrainChange {
   explanation: string
 }
 
+// Demo contract: A1 Mueller Binder Technologies — 14-clause NDA with some fallback positions
 const DEMO_CONTRACT_TEXT = `MUTUAL NON-DISCLOSURE AGREEMENT
+ABC GmbH — Mueller Binder Technologies GmbH
+Effective: January 15, 2025
 
-This Agreement is entered into as of January 15, 2024, between TechCorp GmbH and Acme Industries AG.
+1. NATURE OF AGREEMENT
+Both parties agree to treat information exchanged under this mutual NDA with equal obligations. Agreement is bilateral.
 
-1. DEFINITION OF CONFIDENTIAL INFORMATION
-"Confidential Information" means any non-public technical, business or financial information disclosed by one party to the other, whether in writing, orally, or electronically, including trade secrets, product roadmaps, source code, customer lists, pricing data, and know-how.
+2. CONFIDENTIAL INFORMATION
+"Confidential Information" means information marked as "Confidential" or that by its nature would reasonably be understood to be confidential. Oral disclosures confirmed in writing within 30 days.
 
-2. OBLIGATIONS OF RECEIVING PARTY
-The Receiving Party shall: (a) hold all Confidential Information in strict confidence; (b) not disclose it to any third party without prior written consent; (c) use it solely to evaluate a potential business relationship; (d) apply at least the same security measures it uses for its own confidential data, but no less than reasonable care.
+3. EXCEPTIONS
+Exceptions: (a) publicly available through no fault of Receiving Party; (b) prior possession; (c) received from third party without restriction; (d) independently developed without use of Confidential Information.
 
-3. PERMITTED RECIPIENTS
-Confidential Information may be shared only with employees, contractors, legal counsel and financial advisors who have a strict need-to-know and are bound by written confidentiality obligations at least as restrictive as those herein.
-
-4. TERM AND TERMINATION
-This Agreement is effective on the date signed and continues for three (3) years. Either party may terminate with 30 days written notice. Confidentiality obligations survive termination for five (5) years.
+4. PERMITTED RECIPIENTS
+Disclosure permitted to employees, affiliates, agents, advisors, and contractors on need-to-know basis, bound by equivalent confidentiality obligations.
 
 5. RETURN OR DESTRUCTION
-Upon request or termination, the Receiving Party shall promptly return or permanently destroy all Confidential Information, including copies and extracts, and certify destruction in writing within 10 business days.
+Return or destroy on request with certification within 30 days, except copies required under applicable law. No IT backup carve-out.
 
-6. INTELLECTUAL PROPERTY AND OWNERSHIP
-No license or intellectual property rights are granted. All Confidential Information remains the exclusive property of the Disclosing Party. Nothing herein transfers ownership of any patents, trademarks, or copyrights.
+6. NO WARRANTY
+All Confidential Information provided "AS IS." No warranty on accuracy, completeness, or fitness. No liability for reliance.
 
-7. GOVERNING LAW AND DISPUTE RESOLUTION
-This Agreement is governed by the laws of Germany. Disputes shall first be submitted to mediation, then to binding arbitration under ICC rules in Munich, Germany.
+7. CONTRACTUAL PENALTY
+No contractual penalty shall apply. Remedies limited to actual damages proven by the aggrieved party.
 
-8. LIABILITY AND REMEDIES
-The parties acknowledge that breach would cause irreparable harm entitling the Disclosing Party to seek injunctive relief without bond. Aggregate liability under this Agreement shall not exceed EUR 50,000.
+8. LIABILITY
+Neither party liable for indirect or consequential damages arising from slight negligence (leichte Fahrlässigkeit). Aggregate liability capped at EUR 50,000.
 
-9. GENERAL PROVISIONS
-This Agreement is the entire agreement between the parties regarding its subject matter and supersedes all prior oral and written agreements. It may not be amended except in writing signed by both parties.`
+9. IP RIGHTS
+No license or rights granted. All Confidential Information remains exclusive property of Disclosing Party.
+
+10. NON-SOLICITATION
+No non-solicitation restriction applies under this Agreement.
+
+11. TERM AND SURVIVAL
+Agreement term: 3 years. Confidentiality obligations survive termination for 4 years from each individual disclosure.
+
+12. GOVERNING LAW
+Laws of the Federal Republic of Germany govern without conflict of laws principles.
+
+13. DISPUTE RESOLUTION
+ICC arbitration, seat: Zurich, Switzerland. English language. One (1) arbitrator. Carve-out for injunctive relief.
+
+14. SIGNATURES
+Executed by duly authorized representatives. Electronic signatures via DocuSign accepted.`
+const DEMO_CONTRACT_FILENAME = 'A1_Mueller_Binder_Technologies_NDA.pdf'
 
 const NODE_TYPE_COLORS: Record<string, string> = {
   clause:     '#007c79',
@@ -73,7 +90,6 @@ export function MiniBrainPage(): JSX.Element {
   const { user } = useUser()
   const containerRef = React.useRef<HTMLDivElement>(null)
   const graphRef = React.useRef<any>(null)
-  const globalScaleRef = React.useRef(1)
   const [dims, setDims] = React.useState({ w: 800, h: 600 })
   const [brain, setBrain] = React.useState<PlaybookBrain | null>(null)
   const [selected, setSelected] = React.useState<BrainNodeView | null>(null)
@@ -96,7 +112,12 @@ export function MiniBrainPage(): JSX.Element {
   const [matchedIds, setMatchedIds] = React.useState<Set<string>>(new Set())
   const [uploading, setUploading] = React.useState(false)
   const contractFileRef = React.useRef<HTMLInputElement>(null)
-  const circleAnimRef = React.useRef<number>(0)
+
+  // GROW: playbook update proposals
+  const [growProposals, setGrowProposals] = React.useState<PlaybookUpdateProposal[]>([])
+  const [growLoading, setGrowLoading] = React.useState(false)
+  const [growShown, setGrowShown] = React.useState(false)
+  const [contractFilename, setContractFilename] = React.useState('')
 
   // Brain editing (Peter only)
   const [editMode, setEditMode] = React.useState(false)
@@ -106,14 +127,14 @@ export function MiniBrainPage(): JSX.Element {
   const [nlProcessing, setNlProcessing] = React.useState(false)
   const [proposedChange, setProposedChange] = React.useState<ProposedBrainChange | null>(null)
 
-  // Refs so onRenderFramePre never has a stale closure
+  const [circleProgress, setCircleProgress] = React.useState(0)
+  const circleAnimRef = React.useRef<number>(0)
+
   const contractAnalysisRef = React.useRef<AnalyzeContractResponse | null>(null)
-  const circleProgressRef = React.useRef(0)
   const matchedIdsRef = React.useRef<Set<string>>(new Set())
 
   React.useEffect(() => {
     contractAnalysisRef.current = contractAnalysis
-    if (!contractAnalysis) circleProgressRef.current = 0
   }, [contractAnalysis])
 
   React.useEffect(() => {
@@ -126,17 +147,102 @@ export function MiniBrainPage(): JSX.Element {
     return () => window.removeEventListener('mousemove', track)
   }, [])
 
-  // Contract circle d3 force
+
+  function processAnalysisResult(result: typeof contractAnalysis, fname: string): void {
+    if (!result) return
+    const ids = new Set<string>()
+    for (const c of result.clauses) {
+      if (c.match) {
+        ids.add(c.match.matched_clause.clause_id)
+        ids.add(`${c.match.matched_clause.clause_id}:${c.match.matched_hierarchy_position}`)
+      }
+    }
+    setMatchedIds(ids)
+    matchedIdsRef.current = ids
+    setContractAnalysis(result)
+    setContractFilename(fname)
+    setGrowProposals([])
+    setGrowShown(false)
+    setCitation(null)
+    setSelected(null)
+  }
+
+  async function uploadContract(file: File): Promise<void> {
+    setUploading(true)
+    setMessage(null)
+    try {
+      const result = await analyzePublicContractFile(playbookId, file)
+      processAnalysisResult(result, file.name)
+    } catch {
+      setMessage('Contract analysis failed — check that the file is a valid PDF, DOCX or TXT.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function loadGrowProposals(): Promise<void> {
+    if (!contractAnalysis) return
+    setGrowLoading(true)
+    try {
+      const deviations = contractAnalysis.clauses
+        .filter(c => c.match && c.match.matched_hierarchy_position !== 'preferred')
+        .map(c => ({
+          clauseId: c.match!.matched_clause.clause_id,
+          negotiatedText: c.segmented_clause.text,
+          position: c.match!.matched_hierarchy_position,
+        }))
+      const proposals = await fetchGrowProposals(playbookId, contractFilename || DEMO_CONTRACT_FILENAME, deviations)
+      setGrowProposals(proposals)
+      setGrowShown(true)
+    } finally {
+      setGrowLoading(false)
+    }
+  }
+
+  function acceptGrowProposal(proposalId: string): void {
+    setGrowProposals(prev => prev.map(p => p.proposal_id === proposalId ? { ...p, status: 'accepted' as const } : p))
+    setCommitted(false)
+    setMessage('Proposal accepted — review in brain and commit when ready to push to Mega Brain.')
+  }
+
+  function rejectGrowProposal(proposalId: string): void {
+    setGrowProposals(prev => prev.map(p => p.proposal_id === proposalId ? { ...p, status: 'rejected' as const } : p))
+  }
+
+  function dismissContract(): void {
+    cancelAnimationFrame(circleAnimRef.current)
+    graphRef.current?.d3Force('contractCircle', null)
+    graphRef.current?.d3ReheatSimulation()
+    contractAnalysisRef.current = null
+    setContractAnalysis(null)
+    setMatchedIds(new Set())
+    matchedIdsRef.current = new Set()
+    setCircleProgress(0)
+    setCitation(null)
+    setGrowProposals([])
+    setGrowShown(false)
+    setContractFilename('')
+  }
+
+  // Memoize graphData so ForceGraph2D never gets a new object reference on
+  // unrelated state changes (contract upload, selection, etc.), which would
+  // restart the D3 simulation and scatter all nodes back to the origin.
+  const graphData = React.useMemo(
+    () => brain ? { nodes: brain.nodes, links: brain.edges } : { nodes: [], links: [] },
+    [brain],
+  )
+
+  // Contract circle force: pulls matched nodes to ring, rotates others around it
   React.useEffect(() => {
     const graph = graphRef.current
     if (!graph || !contractAnalysis) return
-    // Graph-space: D3 simulation centers nodes around (0,0)
-    const R = Math.min(dims.w, dims.h) * 0.41 / (globalScaleRef.current || 1)
-
+    const cx = dims.w / 2
+    const cy = dims.h / 2
+    const R = Math.min(dims.w, dims.h) * 0.41
     function contractForce(alpha: number): void {
       for (const node of (graph.graphData()?.nodes ?? [])) {
-        const nx = node.x ?? 0
-        const ny = node.y ?? 0
+        const nx = (node.x ?? cx) - cx
+        const ny = (node.y ?? cy) - cy
         const dist = Math.sqrt(nx * nx + ny * ny) || 1
         if (matchedIdsRef.current.has(node.id)) {
           const pull = ((dist - R) / dist) * alpha * 0.22
@@ -152,71 +258,20 @@ export function MiniBrainPage(): JSX.Element {
     ;(contractForce as any).initialize = (): void => {}
     graph.d3Force('contractCircle', contractForce)
     graph.d3ReheatSimulation()
-
-    // Animate circle — write directly to ref so onRenderFramePre always reads fresh value
-    cancelAnimationFrame(circleAnimRef.current)
-    circleProgressRef.current = 0
     const start = performance.now()
     function animate(now: number): void {
-      circleProgressRef.current = Math.min(1, (now - start) / 1200)
-      if (circleProgressRef.current < 1) {
-        circleAnimRef.current = requestAnimationFrame(animate)
-      }
+      const t = Math.min(1, (now - start) / 1200)
+      setCircleProgress(t)
+      if (t < 1) circleAnimRef.current = requestAnimationFrame(animate)
     }
     circleAnimRef.current = requestAnimationFrame(animate)
-
     return () => {
       cancelAnimationFrame(circleAnimRef.current)
       graph.d3Force('contractCircle', null)
     }
-  }, [contractAnalysis, dims])
+  }, [contractAnalysis, matchedIds, dims])
 
-  async function uploadContract(file: File): Promise<void> {
-    setUploading(true)
-    setMessage(null)
-    try {
-      const result = await analyzePublicContractFile(playbookId, file)
-      const ids = new Set<string>()
-      for (const c of result.clauses) {
-        if (c.match) {
-          ids.add(c.match.matched_clause.clause_id)
-          // Also match child hierarchy nodes
-          ids.add(`${c.match.matched_clause.clause_id}:preferred`)
-        }
-      }
-      setMatchedIds(ids)
-      matchedIdsRef.current = ids
-      setContractAnalysis(result)
-      setCitation(null)
-      setSelected(null)
-    } catch {
-      setMessage('Contract analysis failed — check that the file is a valid PDF, DOCX or TXT.')
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  function dismissContract(): void {
-    cancelAnimationFrame(circleAnimRef.current)
-    circleProgressRef.current = 0
-    contractAnalysisRef.current = null
-    setContractAnalysis(null)
-    setMatchedIds(new Set())
-    matchedIdsRef.current = new Set()
-    setCitation(null)
-    graphRef.current?.d3Force('contractCircle', null)
-    graphRef.current?.d3ReheatSimulation()
-  }
-
-  // Memoize graphData so ForceGraph2D never gets a new object reference on
-  // unrelated state changes (contract upload, selection, etc.), which would
-  // restart the D3 simulation and scatter all nodes back to the origin.
-  const graphData = React.useMemo(
-    () => brain ? { nodes: brain.nodes, links: brain.edges } : { nodes: [], links: [] },
-    [brain],
-  )
-
-  // Brain load
+  // Brain load + apply island-clustering force after graph mounts
   React.useEffect(() => {
     let cancelled = false
     async function load(): Promise<void> {
@@ -235,15 +290,63 @@ export function MiniBrainPage(): JSX.Element {
     return () => { cancelled = true }
   }, [playbookId])
 
+  // Layout forces: strong repulsion + grouped sub-nodes per clause
   React.useEffect(() => {
-    if (!containerRef.current) return
+    const graph = graphRef.current
+    if (!graph || !brain) return
+
+    graph.d3Force('charge')?.strength(-500)
+    graph.d3Force('link')?.distance((link: any) =>
+      link.relationship === 'playbook_hierarchy' ? 120 : 80
+    )
+
+    // Build clause → children map for cohesion force
+    const clauseOf: Record<string, string> = {}
+    for (const node of brain.nodes) {
+      if (node.node_type === 'clause') clauseOf[node.id] = node.id
+      else if (node.clause?.clause_id) clauseOf[node.id] = node.clause.clause_id
+    }
+    function clusterForce(alpha: number): void {
+      const positions: Record<string, { x: number; y: number; count: number }> = {}
+      for (const node of (graph.graphData()?.nodes ?? [])) {
+        const cid = clauseOf[node.id]
+        if (!cid) continue
+        if (!positions[cid]) positions[cid] = { x: 0, y: 0, count: 0 }
+        positions[cid].x += node.x ?? 0
+        positions[cid].y += node.y ?? 0
+        positions[cid].count++
+      }
+      for (const [cid, centroid] of Object.entries(positions)) {
+        if (centroid.count < 2) continue
+        const cx = centroid.x / centroid.count
+        const cy = centroid.y / centroid.count
+        for (const node of (graph.graphData()?.nodes ?? [])) {
+          if (clauseOf[node.id] !== cid) continue
+          node.vx = (node.vx ?? 0) + (cx - (node.x ?? 0)) * alpha * 0.12
+          node.vy = (node.vy ?? 0) + (cy - (node.y ?? 0)) * alpha * 0.12
+        }
+      }
+    }
+    ;(clusterForce as any).initialize = (): void => {}
+    graph.d3Force('clusterCohesion', clusterForce)
+    return () => { graph.d3Force('clusterCohesion', null) }
+  }, [brain])
+
+  React.useEffect(() => {
+    if (!brain || loading || !containerRef.current) return
+    const el = containerRef.current
     const ro = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect
-      setDims({ w: width, h: height })
+      if (width > 0 && height > 0) setDims({ w: width, h: height })
     })
-    ro.observe(containerRef.current)
-    return () => ro.disconnect()
-  }, [])
+    ro.observe(el)
+    // Measure immediately so canvas matches container on first render
+    const rect = el.getBoundingClientRect()
+    if (rect.width > 0 && rect.height > 0) setDims({ w: rect.width, h: rect.height })
+    // Fit graph to view — let simulation run first, then zoom to fit
+    const t = setTimeout(() => { graphRef.current?.zoomToFit(400, 60) }, 600)
+    return () => { ro.disconnect(); clearTimeout(t) }
+  }, [brain, loading])
 
   function commitDraft(): void {
     if (!comment.trim()) { setCommentError(true); return }
@@ -417,9 +520,13 @@ export function MiniBrainPage(): JSX.Element {
         </div>
       </section>
 
-      {loading && <BrainLoader label="Loading mini brain…" />}
+      {!loading && !brain && (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)' }}>
+          <p style={{ fontSize: 13 }}>Select or upload a playbook to view the brain.</p>
+        </div>
+      )}
 
-      {brain && !loading && (
+      {!loading && brain && (
         <section className="miniBrainLayout pageEnter">
           <div className="miniBrainCanvas" ref={containerRef} aria-label="Mini brain graph">
             <ForceGraph2D<BrainNodeView, BrainEdgeView>
@@ -432,12 +539,8 @@ export function MiniBrainPage(): JSX.Element {
               nodeCanvasObject={(node, ctx, scale) =>
                 drawMiniNode(node as BrainNodeView, ctx, scale, selected, matchedIdsRef)
               }
-              onRenderFramePre={(ctx, globalScale) => {
-                globalScaleRef.current = globalScale
-                if (contractAnalysisRef.current && circleProgressRef.current > 0) {
-                  const R = Math.min(dims.w, dims.h) * 0.41 / globalScale
-                  drawContractCircle(ctx, R, circleProgressRef.current)
-                }
+              onRenderFramePre={(ctx) => {
+                if (contractAnalysis && circleProgress > 0) drawContractCircle(ctx, dims.w, dims.h, circleProgress)
               }}
               linkCanvasObject={(link, ctx) =>
                 drawMiniLink(link as LinkObject<BrainNodeView, BrainEdgeView> & BrainEdgeView, ctx)
@@ -457,7 +560,7 @@ export function MiniBrainPage(): JSX.Element {
               }}
               onNodeClick={(node) => handleNodeClick(node as BrainNodeView)}
               onBackgroundClick={() => { setSelected(null); setCitation(null) }}
-              cooldownTicks={Infinity}
+              cooldownTicks={160}
               d3AlphaDecay={0.012}
               d3VelocityDecay={0.22}
               autoPauseRedraw={false}
@@ -730,11 +833,72 @@ export function MiniBrainPage(): JSX.Element {
                   >
                     <Upload size={13} /> Replace contract
                   </button>
+
+                  {/* GROW: Propose playbook updates */}
+                  {!growShown && (
+                    <button
+                      type="button"
+                      className="primaryAction drawerWide"
+                      style={{ marginTop: 8, fontSize: 11 }}
+                      disabled={growLoading}
+                      onClick={() => void loadGrowProposals()}
+                    >
+                      <Sparkles size={12} />
+                      {growLoading ? 'Analysing deviations…' : 'Grow: Propose playbook updates'}
+                    </button>
+                  )}
+                  {growShown && growProposals.length > 0 && (
+                    <div style={{ marginTop: 10 }}>
+                      <p className="panelKicker" style={{ color: 'var(--turquoise)', marginBottom: 6 }}>
+                        Playbook Growth Proposals
+                      </p>
+                      <p style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 8, lineHeight: 1.5 }}>
+                        Based on negotiation patterns in {contractFilename || DEMO_CONTRACT_FILENAME}. Accept to stage for commit.
+                      </p>
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        {growProposals.map(p => (
+                          <div key={p.proposal_id} style={{
+                            borderRadius: 7,
+                            background: p.status === 'accepted' ? 'rgba(0,124,121,.07)' : p.status === 'rejected' ? 'rgba(47,42,34,.04)' : 'rgba(255,251,243,.9)',
+                            border: `1px solid ${p.status === 'accepted' ? 'rgba(0,124,121,.25)' : p.status === 'rejected' ? 'rgba(47,42,34,.10)' : 'rgba(47,42,34,.15)'}`,
+                            padding: '8px 10px',
+                            opacity: p.status === 'rejected' ? 0.5 : 1,
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                              <div>
+                                <p className="panelKicker" style={{ fontSize: 9, marginBottom: 2, color: p.impact === 'high' ? 'var(--risk)' : p.impact === 'medium' ? 'var(--orange)' : 'var(--muted)' }}>
+                                  {p.impact.toUpperCase()} · {Math.round(p.confidence * 100)}% confidence
+                                </p>
+                                <strong style={{ fontSize: 11, color: 'var(--ink)' }}>{p.clause_name}</strong>
+                              </div>
+                              {p.status === 'accepted' && <span style={{ fontSize: 10, color: 'var(--turquoise)', fontWeight: 700 }}>✓ Staged</span>}
+                            </div>
+                            <p style={{ fontSize: 10, color: 'var(--muted)', margin: '4px 0 6px', lineHeight: 1.5 }}>
+                              {p.observation.slice(0, 120)}{p.observation.length > 120 ? '…' : ''}
+                            </p>
+                            <p style={{ fontSize: 10, color: 'var(--ink)', margin: '0 0 6px', fontStyle: 'italic' }}>
+                              → {p.proposed_update.slice(0, 100)}{p.proposed_update.length > 100 ? '…' : ''}
+                            </p>
+                            {p.status === 'pending' && (
+                              <div style={{ display: 'flex', gap: 5 }}>
+                                <button type="button" className="primaryAction" style={{ flex: 1, fontSize: 10, padding: '3px 6px' }} onClick={() => acceptGrowProposal(p.proposal_id)}>
+                                  Accept
+                                </button>
+                                <button type="button" className="secondaryAction" style={{ flex: 1, fontSize: 10, padding: '3px 6px' }} onClick={() => rejectGrowProposal(p.proposal_id)}>
+                                  Reject
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
-                  <p style={{ fontSize: 11, color: 'var(--muted)', margin: '0 0 8px' }}>
-                    Upload a contract to overlay it on the brain and see which clauses are covered.
+                  <p style={{ fontSize: 11, color: 'var(--muted)', margin: '0 0 8px', lineHeight: 1.55 }}>
+                    Upload a negotiated contract to overlay it on the brain and see which positions were achieved.
                   </p>
                   <button
                     className="secondaryAction drawerWide"
@@ -753,27 +917,10 @@ export function MiniBrainPage(): JSX.Element {
                       onClick={() => {
                         setUploading(true)
                         setMessage(null)
-                        analyzePublicContractText(playbookId, DEMO_CONTRACT_TEXT, 'Demo-NDA.txt')
-                          .then((result) => {
-                            const ids = new Set<string>()
-                            for (const c of result.clauses) {
-                              if (c.match) {
-                                ids.add(c.match.matched_clause.clause_id)
-                                ids.add(`${c.match.matched_clause.clause_id}:preferred`)
-                              }
-                            }
-                            setMatchedIds(ids)
-                            matchedIdsRef.current = ids
-                            setContractAnalysis(result)
-                            setCitation(null)
-                            setSelected(null)
-                          })
-                          .catch(() => {
-                            setMessage('Demo analysis failed — check the API connection.')
-                          })
-                          .finally(() => {
-                            setUploading(false)
-                          })
+                        analyzePublicContractText(playbookId, DEMO_CONTRACT_TEXT, DEMO_CONTRACT_FILENAME)
+                          .then((result) => { processAnalysisResult(result, DEMO_CONTRACT_FILENAME) })
+                          .catch(() => { setMessage('Demo analysis failed.') })
+                          .finally(() => { setUploading(false) })
                       }}
                     >
                       Try demo NDA
@@ -837,17 +984,25 @@ export function MiniBrainPage(): JSX.Element {
             {/* Legend */}
             <section>
               <p className="panelKicker">Legend</p>
-              <div className="megaBrainLegend">
+              <div className="megaBrainLegend" style={{ flexDirection: 'column', gap: 5 }}>
                 {[
-                  { color: '#007c79', label: 'Clause / Preferred' },
-                  { color: '#9b6f43', label: 'Fallback 1' },
-                  { color: '#b98546', label: 'Fallback 2' },
-                  { color: '#4a2430', label: 'Red line' },
-                  { color: '#ec6602', label: 'Escalation' },
+                  { color: '#007c79', label: 'Clause', shape: 'circle' },
+                  { color: '#007c79', label: 'Preferred', shape: 'ring' },
+                  { color: '#9b6f43', label: 'Fallback 1', shape: 'diamond' },
+                  { color: '#b98546', label: 'Fallback 2', shape: 'square' },
+                  { color: '#4a2430', label: 'Red line', shape: 'danger' },
+                  { color: '#ec6602', label: 'Escalation', shape: 'triangle' },
                 ].map(l => (
                   <div key={l.label} className="megaBrainLegendItem">
-                    <div className="megaBrainLegendDot" style={{ background: l.color }} />
-                    {l.label}
+                    <svg width="14" height="14" viewBox="0 0 14 14" style={{ flexShrink: 0 }}>
+                      {l.shape === 'circle' && <circle cx="7" cy="7" r="5" fill={l.color} />}
+                      {l.shape === 'ring' && <><circle cx="7" cy="7" r="5" fill={l.color} /><circle cx="7" cy="7" r="3.2" stroke="rgba(255,255,255,0.4)" strokeWidth="1.2" fill="none" /></>}
+                      {l.shape === 'diamond' && <polygon points="7,1 13,7 7,13 1,7" fill={l.color} />}
+                      {l.shape === 'square' && <rect x="2" y="2" width="10" height="10" fill={l.color} />}
+                      {l.shape === 'danger' && <><circle cx="7" cy="7" r="5" fill={l.color} /><circle cx="7" cy="7" r="6" stroke="rgba(180,40,40,0.7)" strokeWidth="1.5" fill="none" /></>}
+                      {l.shape === 'triangle' && <polygon points="7,1 13,13 1,13" fill={l.color} />}
+                    </svg>
+                    <span style={{ fontSize: 11 }}>{l.label}</span>
                   </div>
                 ))}
               </div>
@@ -865,38 +1020,6 @@ export function MiniBrainPage(): JSX.Element {
   )
 }
 
-// R is in D3 graph-space units; ctx is already in graph-space (camera transform applied)
-function drawContractCircle(ctx: CanvasRenderingContext2D, R: number, progress: number): void {
-  // Draw centered on D3 simulation origin (0,0) — where nodes cluster
-  const glowGrad = ctx.createRadialGradient(0, 0, R - R * 0.14, 0, 0, R + R * 0.14)
-  glowGrad.addColorStop(0, 'rgba(20,15,10,0)')
-  glowGrad.addColorStop(0.5, `rgba(20,15,10,${0.07 * progress})`)
-  glowGrad.addColorStop(1, 'rgba(20,15,10,0)')
-  ctx.beginPath()
-  ctx.arc(0, 0, R, 0, Math.PI * 2)
-  ctx.strokeStyle = glowGrad
-  ctx.lineWidth = R * 0.28
-  ctx.stroke()
-  // Dashed arc drawing proportional to progress
-  ctx.save()
-  ctx.beginPath()
-  ctx.arc(0, 0, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress)
-  ctx.strokeStyle = `rgba(20,15,10,${0.75 * progress})`
-  ctx.lineWidth = 2.5
-  ctx.setLineDash([R * 0.055, R * 0.028])
-  ctx.stroke()
-  ctx.setLineDash([])
-  ctx.restore()
-  // Label fades in at end
-  if (progress > 0.9) {
-    ctx.font = '10px Inter, sans-serif'
-    ctx.fillStyle = `rgba(20,15,10,${Math.min(1, (progress - 0.9) * 10)})`
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText('CONTRACT BOUNDARY', 0, -R - 18)
-  }
-}
-
 function drawMiniNode(
   node: BrainNodeView,
   ctx: CanvasRenderingContext2D,
@@ -909,11 +1032,10 @@ function drawMiniNode(
   const isClause = node.node_type === 'clause'
   const isMatched = matchedIdsRef.current.has(node.id) || matchedIdsRef.current.has(node.clause?.clause_id ?? '')
   const isSelected = selected?.id === node.id
-
   const radius = NODE_TYPE_SIZE[node.node_type] ?? 4.5
   const color = NODE_TYPE_COLORS[node.node_type] ?? '#007c79'
 
-  // Issue/warning pulse ring
+  // Issue/warning pulse ring for clause nodes
   if (isClause && node.status !== 'clean') {
     const ringAlpha = 0.18 + 0.10 * Math.sin(Date.now() / 600)
     ctx.beginPath()
@@ -938,17 +1060,74 @@ function drawMiniNode(
   if (isSelected) {
     ctx.beginPath()
     ctx.arc(x, y, radius + 4, 0, Math.PI * 2)
-    ctx.strokeStyle = isMatched ? 'rgba(0,153,153,.9)' : 'rgba(0,153,153,.7)'
+    ctx.strokeStyle = 'rgba(0,153,153,.7)'
     ctx.lineWidth = 1.8 / scale
     ctx.stroke()
   }
 
-  // Main dot
-  ctx.beginPath()
-  ctx.arc(x, y, radius, 0, Math.PI * 2)
-  ctx.fillStyle = color
+  // Draw shape by node type
   ctx.globalAlpha = 0.92
-  ctx.fill()
+  if (node.node_type === 'clause') {
+    // Solid circle with label — the cluster hub
+    ctx.beginPath()
+    ctx.arc(x, y, radius, 0, Math.PI * 2)
+    ctx.fillStyle = color
+    ctx.fill()
+  } else if (node.node_type === 'preferred') {
+    // Filled circle — green, slightly smaller
+    ctx.beginPath()
+    ctx.arc(x, y, radius, 0, Math.PI * 2)
+    ctx.fillStyle = color
+    ctx.fill()
+    // Inner ring highlight
+    ctx.beginPath()
+    ctx.arc(x, y, radius - 1.5, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)'
+    ctx.lineWidth = 1.2
+    ctx.stroke()
+  } else if (node.node_type === 'fallback_1') {
+    // Diamond
+    ctx.beginPath()
+    ctx.moveTo(x, y - radius)
+    ctx.lineTo(x + radius, y)
+    ctx.lineTo(x, y + radius)
+    ctx.lineTo(x - radius, y)
+    ctx.closePath()
+    ctx.fillStyle = color
+    ctx.fill()
+  } else if (node.node_type === 'fallback_2') {
+    // Square
+    const s = radius * 0.9
+    ctx.beginPath()
+    ctx.rect(x - s, y - s, s * 2, s * 2)
+    ctx.fillStyle = color
+    ctx.fill()
+  } else if (node.node_type === 'red_line') {
+    // Circle with thick stroke border (danger indicator)
+    ctx.beginPath()
+    ctx.arc(x, y, radius, 0, Math.PI * 2)
+    ctx.fillStyle = color
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(x, y, radius + 1.5, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(180,40,40,0.7)'
+    ctx.lineWidth = 2 / scale
+    ctx.stroke()
+  } else if (node.node_type === 'escalation') {
+    // Triangle
+    ctx.beginPath()
+    ctx.moveTo(x, y - radius)
+    ctx.lineTo(x + radius * 0.87, y + radius * 0.5)
+    ctx.lineTo(x - radius * 0.87, y + radius * 0.5)
+    ctx.closePath()
+    ctx.fillStyle = color
+    ctx.fill()
+  } else {
+    ctx.beginPath()
+    ctx.arc(x, y, radius, 0, Math.PI * 2)
+    ctx.fillStyle = color
+    ctx.fill()
+  }
   ctx.globalAlpha = 1
 
   // Label
@@ -978,10 +1157,42 @@ function drawMiniLink(
     ctx.setLineDash([3, 5])
   } else if (isHierarchy) {
     ctx.strokeStyle = 'rgba(47,42,34,.22)'
+    ctx.lineWidth = 1.5
   } else {
     ctx.strokeStyle = 'rgba(47,42,34,.14)'
   }
   ctx.lineWidth = Math.max(0.6, (link.similarity ?? 0) * 2.2)
   ctx.stroke()
   ctx.setLineDash([])
+}
+
+function drawContractCircle(ctx: CanvasRenderingContext2D, w: number, h: number, progress: number): void {
+  const cx = w / 2
+  const cy = h / 2
+  const R = Math.min(w, h) * 0.41
+  const glowGrad = ctx.createRadialGradient(cx, cy, R - 30, cx, cy, R + 30)
+  glowGrad.addColorStop(0, 'rgba(20,15,10,0)')
+  glowGrad.addColorStop(0.5, `rgba(20,15,10,${0.07 * progress})`)
+  glowGrad.addColorStop(1, 'rgba(20,15,10,0)')
+  ctx.beginPath()
+  ctx.arc(cx, cy, R, 0, Math.PI * 2)
+  ctx.strokeStyle = glowGrad
+  ctx.lineWidth = 60
+  ctx.stroke()
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress)
+  ctx.strokeStyle = `rgba(20,15,10,${0.7 * progress})`
+  ctx.lineWidth = 2
+  ctx.setLineDash([12, 6])
+  ctx.stroke()
+  ctx.setLineDash([])
+  ctx.restore()
+  if (progress > 0.94) {
+    ctx.font = '10px Inter, sans-serif'
+    ctx.fillStyle = `rgba(20,15,10,${(progress - 0.94) * 16})`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('CONTRACT BOUNDARY', cx, cy - R - 16)
+  }
 }
