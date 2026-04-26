@@ -28,12 +28,12 @@ const NODE_TYPE_COLOR: Record<string, string> = {
 }
 
 const NODE_TYPE_SIZE: Record<string, number> = {
-  clause:     7,
-  preferred:  4.5,
-  fallback_1: 3.5,
-  fallback_2: 3,
-  red_line:   4,
-  escalation: 3.5,
+  clause:     3.5,
+  preferred:  2.2,
+  fallback_1: 1.8,
+  fallback_2: 1.6,
+  red_line:   2,
+  escalation: 1.8,
 }
 
 interface GraphNode extends BrainNodeView {
@@ -56,7 +56,7 @@ function buildGraph(brain: MegaBrain): { nodes: GraphNode[]; links: GraphEdge[] 
 
   // Pre-assign island ring positions so warmupTicks starts with nodes already separated
   const count = brain.islands.length
-  const ringR = count <= 2 ? 320 : count <= 5 ? 480 : 650
+  const ringR = count <= 2 ? 220 : count <= 5 ? 320 : 420
   const islandPosMap = new Map<string, { x: number; y: number }>()
   brain.islands.forEach((island, i) => {
     const angle = (i / count) * Math.PI * 2 - Math.PI / 2
@@ -76,7 +76,7 @@ function buildGraph(brain: MegaBrain): { nodes: GraphNode[]; links: GraphEdge[] 
     }
 
     const pos = islandPosMap.get(islandKey)
-    const jitter = () => (Math.random() - 0.5) * 60
+    const jitter = () => (Math.random() - 0.5) * 30
     return { ...n, islandColor, playbookLabel, color: nodeColor, x: pos ? pos.x + jitter() : undefined, y: pos ? pos.y + jitter() : undefined }
   })
 
@@ -155,7 +155,7 @@ export function MegaBrainPage(): JSX.Element {
     if (!g || !megaBrain || megaBrain.islands.length === 0) return
 
     const count = megaBrain.islands.length
-    const ringR = count <= 2 ? 320 : count <= 5 ? 480 : 650
+    const ringR = count <= 2 ? 220 : count <= 5 ? 320 : 420
     const targetPos = new Map<string, { x: number; y: number }>()
     megaBrain.islands.forEach((island, i) => {
       const angle = (i / count) * Math.PI * 2 - Math.PI / 2
@@ -166,15 +166,15 @@ export function MegaBrainPage(): JSX.Element {
       for (const node of (g.graphData()?.nodes ?? [])) {
         const t = targetPos.get((node as any).island_id ?? '')
         if (!t) continue
-        node.vx = (node.vx ?? 0) + (t.x - (node.x ?? 0)) * alpha * 0.15
-        node.vy = (node.vy ?? 0) + (t.y - (node.y ?? 0)) * alpha * 0.15
+        node.vx = (node.vx ?? 0) + (t.x - (node.x ?? 0)) * alpha * 0.18
+        node.vy = (node.vy ?? 0) + (t.y - (node.y ?? 0)) * alpha * 0.18
       }
     }
     ;(islandRingForce as any).initialize = (): void => {}
     g.d3Force('islandRing', islandRingForce)
-    g.d3Force('charge')?.strength(-350)
+    g.d3Force('charge')?.strength(-500)
     g.d3Force('link')?.distance((link: any) =>
-      link.edge_scope === 'cross_island' ? 700 : 60
+      link.edge_scope === 'cross_island' ? 500 : 30
     )
     g.d3ReheatSimulation()
     return () => { g.d3Force('islandRing', null) }

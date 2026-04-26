@@ -4,6 +4,10 @@ export function saveCurrentPlaybookId(playbookId: string): void {
   window.localStorage.setItem(CURRENT_PLAYBOOK_KEY, playbookId)
 }
 
+export function clearCurrentPlaybookId(): void {
+  window.localStorage.removeItem(CURRENT_PLAYBOOK_KEY)
+}
+
 export function getCurrentPlaybookId(): string | null {
   return window.localStorage.getItem(CURRENT_PLAYBOOK_KEY)
 }

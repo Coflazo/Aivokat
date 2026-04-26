@@ -1,7 +1,7 @@
 import React from 'react'
 import { BrainCircuit, ClipboardList, Download, FileSpreadsheet, History, MessageCircle, Network, Upload, UserRoundCog } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { exportExcel } from '../api/client'
 import { useUser } from '../contexts/UserContext'
 
@@ -33,16 +33,22 @@ export function Nav({
   currentPlaybookId: string | null
 }): JSX.Element {
   const { user, setUser } = useUser()
-  const activePlaybookPath = currentPlaybookId ? `/playbooks/${currentPlaybookId}` : '/playbooks/current'
+  const location = useLocation()
 
-  // Derive playbook name from path for the logo subtitle
-  const activePlaybookShort = currentPlaybookId
-    ? currentPlaybookId.slice(0, 10)
-    : null
+  // Derive playbook ID from current URL — source of truth over stale prop
+  const urlPlaybookId = React.useMemo(() => {
+    const m = location.pathname.match(/\/playbooks\/([^/]+)/)
+    const id = m?.[1]
+    return id && id !== 'new' && id !== 'current' ? id : null
+  }, [location.pathname])
+
+  const realPlaybookId = urlPlaybookId ?? (currentPlaybookId && currentPlaybookId !== 'new' ? currentPlaybookId : null)
+  const activePlaybookPath = realPlaybookId ? `/playbooks/${realPlaybookId}` : null
+  const activePlaybookShort = realPlaybookId ? realPlaybookId.slice(0, 10) : null
 
   const peterItems: NavItem[] = [
-    { to: `${activePlaybookPath}/edit`, label: 'Editor', icon: FileSpreadsheet },
-    { to: `${activePlaybookPath}/brain`, label: 'Brain', icon: Network },
+    { to: activePlaybookPath ? `${activePlaybookPath}/edit` : '/playbooks/new/edit', label: 'Editor', icon: FileSpreadsheet },
+    ...(activePlaybookPath ? [{ to: `${activePlaybookPath}/brain`, label: 'Brain', icon: Network }] : []),
     { to: '/mega-brain', label: 'Mega', icon: BrainCircuit },
     { to: '/chat', label: 'Chat', icon: MessageCircle },
     { to: '/history', label: 'History', icon: History },
@@ -51,7 +57,7 @@ export function Nav({
 
   const suzanneItems: NavItem[] = [
     { to: '/mega-brain', label: 'Brain', icon: BrainCircuit },
-    { to: `${activePlaybookPath}/brain`, label: 'Mini Brain', icon: Network },
+    ...(activePlaybookPath ? [{ to: `${activePlaybookPath}/brain`, label: 'Mini Brain', icon: Network }] : []),
     { to: '/chat', label: 'Chat', icon: MessageCircle },
   ]
 

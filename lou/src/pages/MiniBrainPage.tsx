@@ -75,12 +75,12 @@ const NODE_TYPE_COLORS: Record<string, string> = {
 }
 
 const NODE_TYPE_SIZE: Record<string, number> = {
-  clause:     8,
-  preferred:  5.5,
-  fallback_1: 4.5,
-  fallback_2: 4,
-  red_line:   5,
-  escalation: 4.5,
+  clause:     4.5,
+  preferred:  2.8,
+  fallback_1: 2.2,
+  fallback_2: 2,
+  red_line:   2.6,
+  escalation: 2.2,
 }
 
 export function MiniBrainPage(): JSX.Element {
@@ -102,6 +102,7 @@ export function MiniBrainPage(): JSX.Element {
   const [comment, setComment] = React.useState('')
   const [committed, setCommitted] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
+  const [brainMissing, setBrainMissing] = React.useState(false)
   const [publishing, setPublishing] = React.useState(false)
   const [message, setMessage] = React.useState<string | null>(null)
   const [isSuccess, setIsSuccess] = React.useState(false)
@@ -276,12 +277,15 @@ export function MiniBrainPage(): JSX.Element {
     let cancelled = false
     async function load(): Promise<void> {
       setLoading(true)
+      setBrainMissing(false)
       try {
         const data = await fetchPlaybookBrain(playbookId)
         if (!cancelled) {
           saveCurrentPlaybookId(data.playbook_id)
           setBrain(data)
         }
+      } catch {
+        if (!cancelled) setBrainMissing(true)
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -295,9 +299,9 @@ export function MiniBrainPage(): JSX.Element {
     const graph = graphRef.current
     if (!graph || !brain) return
 
-    graph.d3Force('charge')?.strength(-800)
+    graph.d3Force('charge')?.strength(-1800)
     graph.d3Force('link')?.distance((link: any) =>
-      link.relationship === 'playbook_hierarchy' ? 200 : 120
+      link.relationship === 'playbook_hierarchy' ? 35 : 35
     )
 
     // Build clause → children map for cohesion force
@@ -322,8 +326,8 @@ export function MiniBrainPage(): JSX.Element {
         const cy = centroid.y / centroid.count
         for (const node of (graph.graphData()?.nodes ?? [])) {
           if (clauseOf[node.id] !== cid) continue
-          node.vx = (node.vx ?? 0) + (cx - (node.x ?? 0)) * alpha * 0.12
-          node.vy = (node.vy ?? 0) + (cy - (node.y ?? 0)) * alpha * 0.12
+          node.vx = (node.vx ?? 0) + (cx - (node.x ?? 0)) * alpha * 0.35
+          node.vy = (node.vy ?? 0) + (cy - (node.y ?? 0)) * alpha * 0.35
         }
       }
     }
@@ -529,6 +533,19 @@ export function MiniBrainPage(): JSX.Element {
                 zIndex: 10, pointerEvents: 'none',
               }}>
                 <BrainLoader label="Loading mini brain…" />
+              </div>
+            )}
+            {!loading && brainMissing && (
+              <div style={{
+                position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center', gap: 16,
+                color: 'var(--muted)', textAlign: 'center', padding: 40,
+              }}>
+                <p style={{ fontSize: 15 }}>No playbook loaded.</p>
+                <p style={{ fontSize: 13, maxWidth: 280 }}>Select a playbook from the Mega Brain, or upload one in the Editor.</p>
+                <button className="primaryAction" type="button" onClick={() => navigate('/mega-brain')}>
+                  Go to Mega Brain
+                </button>
               </div>
             )}
             <ForceGraph2D<BrainNodeView, BrainEdgeView>

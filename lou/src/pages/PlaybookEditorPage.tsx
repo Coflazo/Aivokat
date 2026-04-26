@@ -3,7 +3,7 @@ import { ArrowRight, Check, Pencil, RefreshCw, Upload, Wand2, X } from 'lucide-r
 import { useNavigate, useParams } from 'react-router-dom'
 import { fetchPlaybook, rewriteCell, rewritePlaybook, updatePlaybookClause, uploadApiPlaybook } from '../api/client'
 import type { PlaybookApi, PlaybookClause, RewriteCellResponse, RewriteMode } from '../types'
-import { resolvePlaybookId, saveCurrentPlaybookId } from '../utils/currentPlaybook'
+import { clearCurrentPlaybookId, resolvePlaybookId, saveCurrentPlaybookId } from '../utils/currentPlaybook'
 
 type ClauseField =
   | 'clause_name'
@@ -215,7 +215,7 @@ export function PlaybookEditorPage(): JSX.Element {
             <button
               className="secondaryAction"
               type="button"
-              onClick={() => { setPlaybook(null); setSelectedClauseId(null); setEditing(null); setError(null) }}
+              onClick={() => { clearCurrentPlaybookId(); setPlaybook(null); setSelectedClauseId(null); setEditing(null); setError(null); navigate('/playbooks/new/edit', { replace: true }) }}
               title="Clear the current table"
             >
               <X size={14} />
@@ -266,7 +266,7 @@ export function PlaybookEditorPage(): JSX.Element {
         {error && !loading && (
           <div className="toolSurface emptyState">
             <p>{error}</p>
-            <button className="primaryAction" type="button" onClick={() => navigate('/')}>Upload playbook</button>
+            <button className="primaryAction" type="button" onClick={() => uploadRef.current?.click()}>Upload playbook</button>
           </div>
         )}
         {playbook && !loading && (

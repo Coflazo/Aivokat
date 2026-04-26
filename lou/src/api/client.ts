@@ -92,7 +92,11 @@ export const uploadApiPlaybook = (
   name: string,
   description = ''
 ): Promise<PlaybookUploadResponse> => {
-  if (MOCK) return delay(MOCK_UPLOAD_RESPONSE(name, owner) as PlaybookUploadResponse, 900)
+  if (MOCK) {
+    const result = MOCK_UPLOAD_RESPONSE(name, owner) as PlaybookUploadResponse
+    mockUploadedPlaybooks.set(result.playbook.playbook_id, result.playbook)
+    return delay(result, 900)
+  }
   const fd = new FormData()
   fd.append('file', file)
   fd.append('owner', owner)
@@ -103,7 +107,9 @@ export const uploadApiPlaybook = (
 
 export const fetchPlaybook = (playbookId: string): Promise<PlaybookApi> => {
   if (MOCK) {
-    const found = MOCK_ALL_PLAYBOOKS.find(p => p.playbook_id === playbookId) ?? MOCK_ALL_PLAYBOOKS[0]
+    const found = MOCK_ALL_PLAYBOOKS.find(p => p.playbook_id === playbookId)
+      ?? mockUploadedPlaybooks.get(playbookId)
+    if (!found) return Promise.reject(new Error('Playbook not found'))
     return delay(found, 50)
   }
   return api.get(`/playbooks/${playbookId}`).then((r) => r.data)
@@ -157,17 +163,103 @@ export const rewritePlaybook = (
     mode,
   }).then((r) => r.data)
 
-export const analyzePlaybook = (playbookId: string): Promise<PlaybookApi> =>
-  api.post(`/analysis/playbook/${playbookId}`).then((r) => r.data)
+// ─── Mock state ───────────────────────────────────────────────────────────────
+const mockUploadedPlaybooks = new Map<string, PlaybookApi>()
+const mockAnalyzedState = new Map<string, PlaybookApi>()
 
-export const acceptIssueFix = (issueId: number): Promise<PlaybookApi> =>
-  api.post(`/analysis/issues/${issueId}/accept-fix`).then((r) => r.data)
+export const analyzePlaybook = (playbookId: string): Promise<PlaybookApi> => {
+  if (MOCK) {
+    const base = MOCK_ALL_PLAYBOOKS.find(p => p.playbook_id === playbookId) ?? MOCK_ALL_PLAYBOOKS[0]
+    const now = new Date().toISOString()
+    // Soft analysis: mostly clean, 1 minor warning issue
+    const analyzed: PlaybookApi = {
+      ...base,
+      clauses: base.clauses.map((clause, i) => {
+        if (i === 3) return {
+          ...clause,
+          analysis_status: 'warning' as const,
+          analysis_summary: 'Indemnification wording is broad — consider scoping to gross negligence.',
+          issues: [{
+            id: 5001,
+            clause_id: clause.clause_id,
+            field_name: 'preferred_position',
+            severity: 'warning' as const,
+            issue_type: 'vague_red_line' as const,
+            explanation: 'The preferred position is broad and may expose undue liability. Consider restricting to gross negligence or wilful misconduct.',
+            proposed_fix: 'Each party shall only be liable for damages resulting from gross negligence or wilful misconduct.',
+            accepted: false,
+            rejected: false,
+            created_at: now,
+            resolved_at: null,
+          }],
+        }
+        return { ...clause, analysis_status: 'clean' as const, analysis_summary: 'No issues detected.', issues: [] }
+      }),
+    }
+    mockAnalyzedState.set(playbookId, analyzed)
+    return delay(analyzed, 800)
+  }
+  return api.post(`/analysis/playbook/${playbookId}`).then((r) => r.data)
+}
 
-export const rejectIssue = (issueId: number): Promise<PlaybookApi> =>
-  api.post(`/analysis/issues/${issueId}/reject`).then((r) => r.data)
+export const acceptIssueFix = (issueId: number): Promise<PlaybookApi> => {
+  if (MOCK) {
+    for (const [pid, playbook] of mockAnalyzedState) {
+      for (const clause of playbook.clauses) {
+        const issue = clause.issues.find(i => i.id === issueId)
+        if (issue) {
+          const now = new Date().toISOString()
+          const updatedClause = {
+            ...clause,
+            analysis_status: 'clean' as const,
+            analysis_summary: 'Fix accepted — clause updated.',
+            issues: clause.issues.map(i => i.id === issueId
+              ? { ...i, accepted: true, resolved_at: now }
+              : i
+            ),
+            ...(issue.proposed_fix ? { [issue.field_name]: issue.proposed_fix } : {}),
+          }
+          const updated = { ...playbook, clauses: playbook.clauses.map(c => c.clause_id === clause.clause_id ? updatedClause : c) }
+          mockAnalyzedState.set(pid, updated)
+          return delay(updated, 400)
+        }
+      }
+    }
+    return delay(MOCK_ALL_PLAYBOOKS[0], 400)
+  }
+  return api.post(`/analysis/issues/${issueId}/accept-fix`).then((r) => r.data)
+}
+
+export const rejectIssue = (issueId: number): Promise<PlaybookApi> => {
+  if (MOCK) {
+    for (const [pid, playbook] of mockAnalyzedState) {
+      for (const clause of playbook.clauses) {
+        const issue = clause.issues.find(i => i.id === issueId)
+        if (issue) {
+          const now = new Date().toISOString()
+          const updatedClause = {
+            ...clause,
+            issues: clause.issues.map(i => i.id === issueId
+              ? { ...i, rejected: true, resolved_at: now }
+              : i
+            ),
+          }
+          const updated = { ...playbook, clauses: playbook.clauses.map(c => c.clause_id === clause.clause_id ? updatedClause : c) }
+          mockAnalyzedState.set(pid, updated)
+          return delay(updated, 400)
+        }
+      }
+    }
+    return delay(MOCK_ALL_PLAYBOOKS[0], 400)
+  }
+  return api.post(`/analysis/issues/${issueId}/reject`).then((r) => r.data)
+}
 
 export const fetchPlaybookBrain = (playbookId: string): Promise<PlaybookBrain> => {
   if (MOCK) {
+    const inStatic = MOCK_ALL_PLAYBOOKS.some(p => p.playbook_id === playbookId)
+    const inUploaded = mockUploadedPlaybooks.has(playbookId)
+    if (!inStatic && !inUploaded) return Promise.reject(new Error('No playbook selected'))
     const brain = playbookId.startsWith('proc') ? PROCUREMENT_BRAIN : MOCK_BRAIN
     return delay({ ...brain, playbook_id: playbookId }, 50)
   }
